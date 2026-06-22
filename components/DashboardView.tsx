@@ -64,7 +64,7 @@ function SectionTitle({ children }: { children: React.ReactNode }) {
 
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <div className={`rounded-xl border border-slate-200 bg-white p-5 shadow-soft ${className}`}>
+    <div className={`rounded-xl border border-slate-200 bg-white p-4 shadow-soft sm:p-5 ${className}`}>
       {children}
     </div>
   );
@@ -187,10 +187,10 @@ export function DashboardView() {
   }
 
   return (
-    <section className="space-y-6">
+    <section className="space-y-4 sm:space-y-6">
 
       {/* ── KPIs principais ─────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-4">
         <KpiCard
           label="Total de clientes"
           value={stats.totalClients}
@@ -222,7 +222,7 @@ export function DashboardView() {
       </div>
 
       {/* ── Linha 2: Status clientes + Status processos ──────────────────── */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
 
         {/* Status dos clientes */}
         <Card>
@@ -287,7 +287,7 @@ export function DashboardView() {
       </div>
 
       {/* ── Linha 3: Top parceiros + Indicadores rápidos ────────────────── */}
-      <div className="grid gap-4 lg:grid-cols-3">
+      <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
 
         {/* Top parceiros por indicações */}
         <Card>
@@ -371,7 +371,7 @@ export function DashboardView() {
       </div>
 
       {/* ── Linha 4: Últimos clientes + Últimos processos ────────────────── */}
-      <div className="grid gap-4 lg:grid-cols-2">
+      <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
 
         {/* Últimos clientes cadastrados */}
         <Card>
