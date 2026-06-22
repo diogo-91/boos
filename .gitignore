@@ -4,6 +4,7 @@ out
 dist
 .env*.local
 tsconfig.tsbuildinfo
+.claude
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
