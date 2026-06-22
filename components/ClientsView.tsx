@@ -76,16 +76,16 @@ export function ClientsView() {
   );
 
   return (
-    <section className="space-y-5">
-      <div className="rounded-xl border border-slate-200 bg-white p-4 shadow-soft sm:p-5">
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+    <section className="space-y-3 sm:space-y-5">
+      <div className="rounded-xl border border-slate-200 bg-white p-3 shadow-soft sm:p-5">
+        <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
           <SearchInput value={search} onChange={setSearch} />
           <div className="flex shrink-0 flex-wrap gap-2">
             <Button onClick={() => setIsClientModalOpen(true)}>
-              + Novo cliente
+              + Cliente
             </Button>
             <Button variant="secondary" onClick={() => setIsProcessModalOpen(true)}>
-              + Novo processo
+              + Processo
             </Button>
             {DRIVE_ROOT_FOLDER_ID && (
               <Button variant="secondary" onClick={() => setIsDriveBrowserOpen(true)}>
@@ -106,7 +106,7 @@ export function ClientsView() {
         </div>
       </div>
 
-      <div className="grid gap-4 rounded-xl border border-slate-200 bg-white p-4 shadow-soft sm:p-5">
+      <div className="grid gap-3 rounded-xl border border-slate-200 bg-white p-3 shadow-soft sm:gap-4 sm:p-5">
         <FilterBar
           label="Status do cliente"
           options={[...CLIENT_STATUS_FILTERS]}
@@ -119,7 +119,7 @@ export function ClientsView() {
           value={processStatus}
           onChange={setProcessStatus}
         />
-        <div className="grid gap-3 sm:grid-cols-2">
+        <div className="grid gap-2 sm:gap-3 sm:grid-cols-2">
           <label className="space-y-2">
             <span className="text-xs font-semibold uppercase tracking-wide text-slate-500">
               Cobrança / Parceiros

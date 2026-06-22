@@ -23,7 +23,7 @@ export function FilterBar({ label, options, value, onChange }: FilterBarProps) {
               type="button"
               onClick={() => onChange(option)}
               className={[
-                "rounded-md border px-3 py-2 text-sm font-medium transition",
+                "rounded-md border px-2 py-1.5 text-xs font-medium transition sm:px-3 sm:py-2 sm:text-sm",
                 isSelected
                   ? "border-navy-800 bg-navy-800 text-white"
                   : "border-slate-200 bg-white text-slate-700 hover:border-navy-700 hover:text-navy-800"
