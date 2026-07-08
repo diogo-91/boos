@@ -1,0 +1,295 @@
+
+ECL GESTÃO  ·  PROJETO FUNDAÇÃO OPERACIONAL
+Estrutura, campos e dinâmica do sistema
+Para: Nathalia Boos
+Etapa: Mapeamento — Semana 1
+Versão: Revisada após feedback (estrutura de pastas ajustada)
+Data: 27 de maio de 2026
+
+Nathalia, este documento mostra como vamos organizar suas pastas, quais campos a base de dados terá e como o sistema vai se comportar no seu dia a dia. Tudo aqui parte do que combinamos no kickoff.
+As telas mostradas são exemplos visuais. O desenho final da interface (cores, identidade visual) vem na próxima semana, depois que você validar essa base.
+Qualquer ajuste, me responda direto. Ainda dá tempo de incorporar antes da gente partir pro visual.
+1. Estrutura das pastas no Google Drive
+A ideia é simples: tudo gira em torno do status do cliente. O Drive vai refletir isso — cada cliente vive em uma pasta-pai que corresponde ao status atual dele. Quando o status muda no sistema, a pasta se move sozinha. Você nunca precisa arrastar nada à mão.
+Visão geral da raiz
+Esta é a estrutura raiz do Drive depois da migração:
+
+📁 Escritório Boos
+│
+├── 📁 01_arquivados
+│     │ Processos concluídos, trâmite encerrado.
+│
+├── 📁 02_ativos
+│     │ Clientes com procuração e contrato assinados, processo em trâmite
+│
+├── 📁 03_ cancelados
+│     │ Clientes que iniciaram contato e não fecharam.
+│	 (separado dos arquivados porque são coisas diferentes)
+├── 📁 04_contratacao
+│    │ Designados pelo Estado (TJ-PR). Honorário via tribunal.
+│
+├── 📁 05_ dativos
+│    │ Designados pelo Estado (TJ-PR). Honorário via tribunal.
+│
+├── 📁 06_parceiros
+│    │  Controles internos das parcerias.
+│       Aqui mora a planilha-mestre parcerias_clientes.gsheet,
+│       que é a fonte do vínculo cliente → parceiro → % de repasse.
+│       Os clientes em si NÃO ficam aqui — eles ficam na pasta
+│       do status deles. A planilha é só o controle.
+│
+└── 📁 07_sarandi
+│     │ Tese em massa de IPTU, 100 processos com trâmite idêntico.
+│       Pasta isolada para não poluir os ativos.
+Por que algumas escolhas?
+•	Ordem com os ativos primeiro: você pediu para ver os ativos no topo, e faz sentido — é onde está o trabalho do dia a dia. Os números na frente (01_, 02_...) servem só para garantir essa ordem no Drive; sem eles, o Google ordena em ordem alfabética e “arquivados” acabaria aparecendo antes de “ativos”. Na interface do sistema você vê tudo formatado bonito, sem os números.
+•	07_Sarandi em pasta separada: são 100 processos com trâmite idêntico, todos em fase de pagamento. Misturados com outros casos ativos, virariam ruído. Separados, você abre a pasta de massa quando precisa, e os ativos ficam enxutos.
+•	Cancelados separado de Arquivados: “arquivado” é processo que rodou e terminou. “cancelado” é cliente que nem virou processo. Misturar recria o problema atual do seu Drive você mesma comentou no kickoff que tem gente nos arquivados que nem chegou a fechar. Por isso mantivemos as duas separadas.
+•	06_parceiros com a planilha-mestre: você já mantém a planilha “Clientes versus honorários” hoje. Vamos padronizar ela em 07_parceiros/parcerias_clientes.gsheet e o sistema vai ler dela — você continua atualizando a planilha do jeito que já faz, e a interface reflete automaticamente.
+2. Dentro da pasta de cada cliente
+Toda pasta de cliente segue o mesmo padrão interno, não importa o status. Assim você sabe sempre onde achar o que precisa:
+
+📁 maria_aparecida_souza
+│
+├── 📁 documentos_pessoais/
+│       PF: RG, CPF, comprovante de endereço.
+│       PJ: contrato social, alterações, cartão CNPJ.
+│
+├── 📄 procuracao.pdf
+├── 📄 contrato_honorarios.pdf
+│       (arquivos únicos — ficam na raiz pra acesso rápido)
+│
+├── 📁 0003312-07.2024_acidente_trabalho/
+│       │   (uma subpasta por processo, nomeada com o nº CNJ)
+│       │
+│       ├── 📁 inicial/
+│       │       DOC_01_..., DOC_02_..., DOC_03_...
+│       │       (mantém o padrão DOC_NN_ que você já usa)
+│       │       peticao_inicial.docx
+│       │
+│       └── 📁 peticoes_subsequentes/
+│               contestacoes, recursos, manifestacoes posteriores
+│
+└── 📁 comunicacao/
+        whatsapp_2024-07.txt
+        whatsapp_2024-09.txt
+        reuniao_inicial_transcricao_2024-07-12.txt
+        reuniao_acompanhamento_2024-10-03.txt
+
+Padrão técnico dos nomes
+Os nomes de pasta vão usar minúsculas e underscore no lugar de espaço (ex: maria_aparecida_souza, não Maria Aparecida Souza). É um padrão técnico que garante que a automação não quebre.
+Mas isso é só no Drive. Na interface do sistema, você sempre vai ver os nomes formatados bonito — “Maria Aparecida Souza”. Você não precisa pensar no underscore no dia a dia.
+3. Os status e como funcionam
+O sistema trabalha com dois conjuntos de status — um para clientes, outro para processos.
+Status do cliente
+Define onde a pasta do cliente fica no Drive. São seis valores:
+Status	O que significa	Onde a pasta fica
+Arquivado	Cliente cujos processos foram todos concluídos.	01_arquivados
+Ativo	Procuração e contrato assinados, processo em trâmite.	02_ativos
+Cancelado	Cliente que iniciou contato e não fechou.	03_cancelados
+Contratação	Cliente recebeu proposta mas ainda não assinou procuração nem contrato.	04_contratacao
+Dativo	Designado pelo Estado (TJ-PR), honorário via tribunal.	05_dativos
+Parceiros	Cliente atendido pelo advogado parceiro	06_parceiros
+Sarandi	Cliente da tese em massa de restituição de IPTU.	07_sarandi
+Status do processo
+Independente do status do cliente, cada processo tem seu próprio status de andamento:
+Status	Quando usar
+Em andamento	Processo protocolado, em curso normal.
+Aguard. documentos	Aguardando alguma documentação para prosseguir.
+Aguard. audiência	Audiência marcada, aguardando data.
+Acordado	Acordo firmado, aguardando alvará ou pagamento. (Importante para acertos financeiros.)
+Encerrado	Trâmite concluído, sentença transitada em julgado ou acordo cumprido.
+
+4. Tela de busca — o que você vai usar todo dia
+Acesso por link, sem instalação, do celular ou do computador. Cada linha é UM CLIENTE — mesmo que ele tenha múltiplos processos, ele aparece uma vez só. Para ver os processos dele, você abre a ficha.
+ 
+Mapeamento dos campos da tela
+Campo	O que mostra	Padrão de formato	De onde vem
+Nome do cliente	Nome principal exibido na linha	PF: nome completo PJ: nome fantasia	Extraído de RG/CPF (PF) ou Cartão CNPJ (PJ)
+Subtítulo	Tipo + documento principal	PF · CPF 000.000.000-00 PJ · CNPJ 00.000.000/0000-00	Tipo: definido na criação Documento: RG/CPF ou Cartão CNPJ
+Status	Status atual do cliente	Badge colorido (6 valores possíveis)	Pasta-pai no Drive — sincronização bidirecional
+Processos	Quantos processos esse cliente tem	1 processo / N processos / sem processo ainda	Contagem automática das subpastas dentro do cliente
+Parceiro	Quem indicou + % de repasse	Nome do Parceiro · X% ou —	Cruzamento com 07_parceiros/parcerias_clientes.gsheet
+Ação	Link para ficha completa	“Abrir” (sublinhado)	—
+Localização do Processo	Local de cadastro do processo 	Projudi 
+Eproc PR 
+Eproc SP
+ etc.
+	Validação da localização de origem do processo
+
+Filtros e funcionalidades
+Elemento	Como funciona
+Caixa de busca	Aceita: nome do cliente, CPF/CNPJ, número CNJ do processo, nome da parte contrária. Sempre retorna o cliente.
+Filtro: Status do cliente	Todos · Ativos · Sarandi · Em contratação · Dativos · Arquivados · Cancelados.
+Filtro: Status do processo	Todos · Em andamento · Aguard. documentos · Aguard. audiência · Acordado · Encerrado. Útil para achar processos prontos para alvará.
+Filtro: Modelo de cobrança	Dropdown: Todos · Avulso entrada+êxito · Avulso só êxito · Recorrente.
+Filtro: Parceiro	Dropdown com lista dinâmica dos parceiros ativos (vinda da planilha) + opção “Sem parceiro”. Útil para fazer acertos com cada parceiro.
+Botão + Novo cliente	Abre formulário de cadastro de cliente novo.
+Botão + Novo processo	Abre formulário de processo novo (escolhe um cliente existente ou cadastra na hora).
+Combinação de filtros	Todos os filtros combinam entre si. Ex: “Acordado” + “Franciele” mostra só os clientes da Franciele prontos para pagamento.
+
+O que essa tela não faz: 
+•	Não mostra prazos vencendo
+•	Não dispara alertas
+•	Não substitui o Projud
+•	Não calcula valor a receber.
+ Consulta de andamentos e prazos processuais continua sendo feita direto no Projud. 
+Controle financeiro segue na sua planilha à parte.
+5. Ficha do cliente
+Quando você clica em um cliente da lista, abre a ficha completa dele. Aqui estão todos os dados, identificação, histórico no escritório, contato, parceria e os processos vinculados.
+ 
+Mapeamento dos campos da ficha
+Identificação
+Campo	O que mostra	Padrão de formato	De onde vem
+Tipo	PF ou PJ	Pessoa Física / Pessoa Jurídica	Definido na criação
+Nome completo (PF) / Razão social (PJ)	Nome formal	Texto livre	RG/CPF (PF) ou Cartão CNPJ (PJ)
+Nome fantasia (PJ)	Nome comercial	Texto livre	Cartão CNPJ
+CPF (PF) / CNPJ (PJ)	Documento principal	CPF: 000.000.000-00 CNPJ: 00.000.000/0000-00	RG/CPF ou Cartão CNPJ
+RG / Inscrição Estadual	Documento secundário	Texto	RG ou Cartão CNPJ
+Data de nascimento / Abertura	Data	DD/MM/AAAA	RG (PF) ou Cartão CNPJ (PJ)
+Estado civil (PF)	Estado civil	Solteiro · Casado · Divorciado · Viúvo · União estável	RG ou manual
+
+Histórico no escritório
+Datas-marco do ciclo de vida do cliente. Importantes para acompanhamento e para indicadores futuros (tempo médio de ativação, taxa de cancelamento, etc.).
+Campo	O que mostra	Padrão de formato	De onde vem
+Data de cadastro	Quando o cliente entrou na base	DD/MM/AAAA	Automática na criação
+Data de ativação	Quando virou Ativo (assinou contrato)	DD/MM/AAAA ou —	Pop-up pergunta ao mudar status para Ativo
+Data de finalização	Quando virou Arquivado ou Cancelado	DD/MM/AAAA ou —	Pop-up pergunta ao mudar status
+
+Contato
+Campo	O que mostra	Padrão de formato	De onde vem
+Telefone / WhatsApp	Contato principal	(DD) 9XXXX-XXXX	Manual ou inferido do histórico de WhatsApp
+E-mail	E-mail	nome@dominio.com	Manual
+Endereço	Endereço residencial (PF) ou fiscal (PJ)	Rua, nº — Bairro, Cidade/UF — CEP	Comprovante de endereço
+
+Origem e parceria
+Campo	O que mostra	Padrão de formato	De onde vem
+Origem do cliente	Como ele chegou ao escritório	Indicação direta · Parceiro · Marketing · Dativo · Outro	Manual
+Parceiro de indicação	Nome do parceiro	Texto ou —	07_parceiros/parcerias_clientes.gsheet (matching por CPF/CNPJ)
+% de honorário ao parceiro	% do repasse	X% ou —	07_parceiros/parcerias_clientes.gsheet
+
+Processos vinculados
+Tabela com uma linha por processo do cliente. Cada linha tem botão “Abrir” que leva à ficha individual do processo.
+Campo	O que mostra	Padrão de formato	De onde vem
+Nº do processo	Número CNJ	0000000-00.0000.0.00.0000	Documentos da inicial
+Tipo de ação	Natureza	Texto (ex: Acidente de trabalho)	Manual
+Status do processo	Andamento atual	Em andamento · Aguard. documentos · Aguard. audiência · Acordado · Encerrado	Manual
+Modelo de cobrança	Tipo de cobrança	Avulso · entrada + êxito / Avulso · só êxito / Recorrente	Contrato de honorários
+Localização do Processo	Local de cadastro do processo 	Projudi 
+Eproc PR 
+Eproc SP
+ etc.
+	Manual
+6. Ficha do processo
+Cada cliente pode ter um ou mais processos. Cada processo vira uma ficha própria com seus dados específicos e o link para a pasta correspondente no Drive.
+ 
+Mapeamento dos campos da ficha
+Dados do processo
+Campo	O que mostra	Padrão de formato	De onde vem
+Cliente	Cliente vinculado	Texto + link para Tela 5	Sistema (vínculo definido na criação)
+Parte contrária	Nome da outra parte	Texto livre	Documentos da inicial
+Status do processo	Andamento atual	Em andamento · Aguard. documentos · Aguard. audiência · Acordado · Encerrado	Manual
+Tipo de ação	Natureza	Texto livre	Manual
+Vara / Comarca	Onde tramita	X Vara — Cidade/UF	Documentos da inicial
+Data de protocolo	Quando foi protocolada	DD/MM/AAAA	Documentos da inicial
+Data de encerramento	Quando virou Encerrado	DD/MM/AAAA ou —	Pop-up pergunta ao mudar status para Encerrado
+Duração	Tempo total do processo	X anos e Y meses (em curso) / X anos e Y meses (encerrado)	Calculada pelo sistema
+
+Cobrança acordada
+Campo	O que mostra	Padrão de formato	De onde vem
+Modelo	Tipo de cobrança	Avulso · Recorrente	Contrato de honorários
+Valor de entrada	Valor inicial cobrado (quando aplicável)	R$ 0.000,00 ou —	Contrato de honorários
+% de êxito	% sobre o resultado	X% ou —	Contrato de honorários
+
+Sobre parceria: a parceria é uma propriedade do cliente, não do processo. Por isso ela não aparece como campo aqui — o sistema infere a parceria a partir do cliente vinculado. Isso evita inconsistência (ex: cliente com 3 processos teria que ter 3 parcerias iguais cadastradas).
+Sobre os valores: como você bem disse no kickoff, o sistema não entra em controle financeiro — recebido, a receber, alvarás. Tudo isso continua na sua planilha à parte. Os campos de valor e % ficam aqui só para você consultar de relance quanto foi combinado.
+Documentos e anotações
+Campo	O que mostra	Padrão de formato	De onde vem
+Caminho da pasta	Localização do processo no Drive	01_ativos › cliente › cnj_tipo_acao	Sistema
+Lista de arquivos	Arquivos dentro da pasta do processo	Nome do arquivo com ícone	Listagem direta da pasta
+Anotações livres	Observações pontuais sobre o caso	Texto livre multilinha	Manual
+7. Como você vai usar no dia a dia
+Aqui está o coração do sistema — como ele se comporta enquanto você trabalha. Três princípios sustentam tudo:
+•	Tudo é sincronizado nos dois lados. Você pode fazer qualquer coisa pela interface ou direto no Drive — o outro lado acompanha em poucos segundos.
+•	O sistema lê os documentos que você joga nas pastas e preenche sozinho os campos que conseguir extrair. Você só completa o que faltar.
+•	A planilha de parcerias é fonte única. Você atualiza a planilha 07_parceiros/parcerias_clientes.gsheet e o sistema reflete tudo automaticamente nas fichas e na busca.
+O que o sistema entende sozinho
+Quando você salva um arquivo na pasta certa, o sistema lê o conteúdo e preenche os campos do cadastro automaticamente:
+Quando você salva isto aqui	O sistema extrai isso
+RG e CPF (em documentos_pessoais/)	Nome completo, CPF, RG, data de nascimento, endereço completo
+Cartão CNPJ e contrato social (em documentos_pessoais/)	Razão social, nome fantasia, CNPJ, endereço, sócios
+procuracao.pdf (na raiz da pasta do cliente)	Confirma identificação e data de outorga
+contrato_honorarios.pdf (na raiz da pasta do cliente)	Modalidade de cobrança, valor de entrada, % de êxito
+Documentos da inicial (em inicial/)	Nº do processo (CNJ), tipo de ação, parte contrária, vara/comarca, data de protocolo
+Linha na planilha 07_parceiros/parcerias_clientes.gsheet	Vincula cliente ao parceiro e ao % de repasse
+WhatsApp exportado e transcrições (em comunicacao/)	Apenas armazena — fica como histórico consultável
+Petições subsequentes (em peticoes_subsequentes/)	Apenas armazena junto ao processo correspondente
+
+Você sempre pode editar qualquer campo manualmente, mesmo os que vieram dos documentos. Se o sistema não conseguir ler um arquivo (por exemplo, uma foto muito borrada do RG), ele deixa os campos em branco e te avisa, aí é só você preencher.
+Cenário 1 — Cliente novo entra em contato
+A Maria entrou em contato hoje, recebeu sua proposta, ainda não fechou. O status inicial é Em Contratação.
+Você faz	Sistema responde
+Cria a pasta maria_souza/ dentro de 03_contratacao no Drive — OU — Clica em “+ Novo cliente” na interface	Espelha a pasta do outro lado em segundos. Maria aparece na busca com status “Em contratação”. Data de cadastro registrada automaticamente.
+Joga o RG e o CPF dela em documentos_pessoais/	Lê os arquivos e preenche: nome completo, CPF, RG, data de nascimento, endereço.
+Abre a ficha da Maria e completa o que faltou (telefone, e-mail, origem do cliente)	Salva o cadastro completo.
+
+Cenário 2 — Cliente fecha o contrato
+A Maria assinou procuração e contrato de honorários. Agora ela vira Ativa.
+Você faz	Sistema responde
+Salva procuracao.pdf e contrato_honorarios.pdf direto na pasta da Maria	Lê o contrato e preenche modalidade de cobrança, valor de entrada e % de êxito.
+Muda o status para “Ativo” na interface — OU — Move a pasta maria_souza/ para 01_ativos no Drive	Abre pop-up perguntando a data de ativação (default: hoje). Você confirma. A outra ponta acompanha. Maria aparece em 01_ativos.
+
+Cenário 3 — Novo processo de cliente existente
+A Maria já é cliente ativa e agora vai entrar com uma ação trabalhista. Você precisa criar o processo dentro da pasta dela.
+Você faz	Sistema responde
+Na ficha da Maria, clica em “+ Novo processo” — OU — Cria a subpasta do processo (ex: 0003312-07.2024_acidente_trabalho/) dentro da pasta dela	Cria a estrutura interna: inicial/ e peticoes_subsequentes/. Processo aparece na ficha da Maria e na busca geral.
+Joga os documentos da inicial em inicial/ (DOC_01, DOC_02...)	Lê o protocolo. Preenche: nº CNJ, parte contrária, vara/comarca, tipo de ação, data de protocolo.
+Completa o que faltar: tipo de ação (se não detectado), anotações	Cadastro do processo salvo.
+
+Cenário 4 — Documentos ao longo do processo
+Você exporta WhatsApp, transcreve reuniões, protocola novas petições. Nesse caso é o cenário mais simples, você só salva no lugar certo.
+Você faz	Sistema responde
+Salva WhatsApp exportado em comunicacao/ da Maria	Armazena. Arquivo aparece listado na ficha da cliente.
+Salva transcrição de reunião em comunicacao/ da Maria	Armazena junto ao histórico de comunicação.
+Salva contestação ou recurso em peticoes_subsequentes/ do processo	Armazena junto ao processo. Aparece listado na ficha do processo.
+
+Cenário 5 — Mudanças de status
+Processo encerra, cliente arquiva, cliente cancela. Toda mudança de status pode ser feita pelos dois lados, interface ou Drive e quando envolve uma data importante, o sistema pergunta antes de gravar.
+Situação	Você faz	Sistema responde
+Um processo do cliente termina (mas o cliente ainda tem outros ativos)	Muda o status daquele processo para “Encerrado” na ficha do processo	Abre pop-up pedindo a data de encerramento (default: hoje). Marca como encerrado. Calcula duração total.
+Todos os processos do cliente terminaram e ele vira histórico	Muda status do cliente para “Arquivado” ou move a pasta para 05_arquivados	Abre pop-up pedindo data de finalização. Cliente sai de Ativos, vai para  Arquivados.
+Cliente em contratação não respondeu mais, desistiu	Muda status para “Cancelado” ou move a pasta para 06_cancelados	Abre pop-up pedindo data de finalização. Cliente vai para  Cancelados.
+Designação dativa pelo TJ	Cria com status “Dativo” já na entrada	Pasta vai direto para 04_Dativos.
+
+Cenário 6 — Registrar parceria
+A Maria veio por indicação da Franciele Romero, que tem direito a 20% de honorário. Você precisa registrar isso para o sistema vincular automaticamente.
+Você faz	Sistema responde
+Abre a planilha 07_parceiros/parcerias_clientes.gsheet Adiciona uma linha com: cliente · CPF · parceiro · % do parceiro · status	Lê a planilha. Cruza pelo CPF da cliente. Mostra “Franciele Romero · 20%” na ficha da Maria e na linha dela na tela de busca.
+Se atualizar o % depois	Reflete na interface em poucos segundos.
+Se remover a linha (parceria encerrada)	Campo de parceiro fica vazio na ficha da Maria.
+
+Pontos importantes para você saber
+•	A sincronização leva alguns segundos. Quando você faz uma mudança, ela aparece do outro lado em poucos segundos, não é instantânea.
+•	Pop-ups de data: sempre que muda para um status que precisa de data registrada (Ativo, Encerrado, Arquivado, Cancelado), o sistema pergunta antes de gravar. Default é hoje, mas você pode ajustar.
+•	Você sempre pode editar manualmente. Mesmo os campos preenchidos automaticamente pela leitura dos documentos podem ser editados a qualquer momento na interface.
+•	PDF’s digitais leem melhor que fotos. Documentos gerados em sistema (com texto selecionável) são lidos com mais precisão. Fotos do RG ou comprovantes podem falhar, nesses casos o sistema te avisa e você preenche manualmente.
+•	Renomear pastas direto no Drive não é recomendado. Pode confundir o sistema. Se precisar mudar o nome do cliente, use a interface.
+•	Mover pastas entre status, sim pode. Esse é o ponto onde a sincronização bidirecional funciona muito bem. Mover a pasta da Maria de 03_contratacao para 01_ativos é a mesma coisa que mudar o status na interface.
+8. O que esta entrega contém
+Vamos entregar nesta fase
+•	Base de dados completa em Google Sheets com seus 200 processos ativos migrados.
+•	Pastas do Drive reorganizadas conforme o padrão deste documento.
+•	Interface web de busca, acessível por link, sem instalação.
+•	Cadastro completo de cliente e de processo com todos os campos mapeados aqui.
+•	Filtros financeiros na busca: por parceiro, modelo de cobrança, status do processo.
+•	Movimentação automática de pastas quando você muda o status.
+•	Pop-ups de registro de data nos marcos do ciclo de vida (ativação, finalização, encerramento).
+•	Planilha 07_parceiros/parcerias_clientes.gsheet como fonte única do vínculo de parcerias.
+•	Repasse de uso e documentação simples.
+O que não entra nesta fase
+•	Não substitui o Projud. A consulta de andamentos e prazos processuais continua sendo feita lá.
+•	Não envia alertas automáticos de prazo (nem por WhatsApp, nem na Agenda).
+•	Não integra com sistemas externos (Projud, Projuris, Receita).
+•	Não gera peças processuais automaticamente.
+•	Não faz controle financeiro (recebido, a receber, alvarás, conciliação).
+•	Não calcula valores a pagar a parceiros, só facilita a consulta filtrada.
