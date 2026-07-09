@@ -6,7 +6,6 @@ import {
   Users,
   FileText,
   Handshake,
-  TrendingUp,
   Clock,
   CheckCircle,
   AlertCircle,
@@ -163,18 +162,6 @@ export function DashboardView() {
     // ── Clientes recentes ─────────────────────────────────────────────────────
     const recentClients = [...clients].slice(-6).reverse();
 
-    // ── % êxito médio ─────────────────────────────────────────────────────────
-    const withFee = processes.filter(p => p.successFee && p.successFee !== "—");
-    const avgFee =
-      withFee.length > 0
-        ? Math.round(
-            withFee.reduce((acc, p) => {
-              const n = parseFloat(p.successFee.replace("%", ""));
-              return acc + (isNaN(n) ? 0 : n);
-            }, 0) / withFee.length
-          )
-        : null;
-
     return {
       totalClients: clients.length,
       totalProcesses: processes.length,
@@ -187,9 +174,7 @@ export function DashboardView() {
       semProcesso,
       comDrive,
       recentProcesses,
-      recentClients,
-      avgFee,
-      withFee: withFee.length
+      recentClients
     };
   }, [clients, processes]);
 
@@ -206,7 +191,7 @@ export function DashboardView() {
     <section className="space-y-4 sm:space-y-6">
 
       {/* ── KPIs principais ─────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-4">
+      <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3">
         <KpiCard
           label="Total de Clientes"
           value={stats.totalClients}
@@ -227,13 +212,6 @@ export function DashboardView() {
           sub="com indicações vinculadas"
           icon={Handshake}
           color="bg-sky-600"
-        />
-        <KpiCard
-          label="% Êxito Médio"
-          value={stats.avgFee !== null ? `${stats.avgFee}%` : "—"}
-          sub={stats.avgFee !== null ? `baseado em ${stats.withFee} processos` : "nenhum processo com %"}
-          icon={TrendingUp}
-          color="bg-violet-600"
         />
       </div>
 
