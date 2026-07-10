@@ -105,12 +105,8 @@ export function useGoogleDriveUpload() {
   }, []);
 
   useEffect(() => {
-    if (!hasConsented()) return;
-    const id = setTimeout(() => {
-      getToken(true).catch(() => setIsAuthorized(false));
-    }, 800);
-    return () => clearTimeout(id);
-  }, [getToken]);
+    if (hasConsented()) setIsAuthorized(true);
+  }, []);
 
   const requestAuthorization = useCallback(async (onError: (msg: string) => void) => {
     setIsAuthorizing(true);
@@ -127,7 +123,7 @@ export function useGoogleDriveUpload() {
     async (file: File, folderId: string, onDone: (msg?: string) => void, onError: (msg: string) => void) => {
       let token = accessTokenRef.current;
       if (!token && hasConsented()) {
-        try { token = await getToken(true); } catch {}
+        try { token = await getToken(true); } catch { setIsAuthorized(false); }
       }
 
       if (!token) {
