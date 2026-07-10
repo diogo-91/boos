@@ -442,10 +442,15 @@ export type ReadResult = {
   skipReason?: string;
 };
 
+export type ProgressStep = "context" | "download" | "ai" | "match" | "save";
+export type ProgressStatus = "active" | "done" | "skip" | "error";
+export type ProgressEmitter = (step: ProgressStep, status: ProgressStatus, message?: string) => void;
+
 export async function readDriveFile(
   fileId: string,
   fileName: string,
-  parentFolderId: string
+  parentFolderId: string,
+  emit: ProgressEmitter = () => {}
 ): Promise<ReadResult> {
   const result: ReadResult = {
     fileId,
@@ -457,6 +462,8 @@ export async function readDriveFile(
     skipped: false
   };
 
+  emit("context", "active", "Identificando pasta e tipo de documento");
+
   const grandParentId = await getParentFolderId(parentFolderId);
   const statusMap = await getStatusFolderMap();
 
@@ -466,6 +473,7 @@ export async function readDriveFile(
   if (statusMap[parentFolderId]) {
     result.skipped = true;
     result.skipReason = "Arquivo na pasta de status, não dentro de um cliente";
+    emit("context", "skip", result.skipReason);
     return result;
   } else if (grandParentId && statusMap[grandParentId]) {
     clientFolderId = parentFolderId;
@@ -483,17 +491,25 @@ export async function readDriveFile(
 
   const docType = detectDocumentType(fileName, folderContext);
   result.documentType = docType;
+  emit("context", "done", `Tipo detectado: ${docType}`);
 
+  emit("download", "active", "Baixando conteúdo do arquivo");
   const fileData = await downloadFileFromDrive(fileId);
   if (!fileData) {
     result.skipped = true;
     result.skipReason = "Arquivo muito grande para leitura automática";
+    emit("download", "skip", result.skipReason);
     return result;
   }
+  emit("download", "done");
 
+  emit("ai", "active", "Lendo documento com IA");
   const extracted = await extractWithClaude(fileData.content, fileData.mimeType, docType, fileName);
+  emit("ai", "done", `${Object.keys(extracted).length} campo(s) identificado(s)`);
 
   if (result.processId) {
+    emit("match", "done", "Processo já vinculado a esta pasta");
+    emit("save", "active", "Salvando dados no processo");
     if (docType === "contrato_honorarios" || docType === "documento_inicial") {
       const processFields: ExtractedProcessFields = {
         numero_cnj: extracted.numero_cnj,
@@ -510,18 +526,25 @@ export async function readDriveFile(
         (k) => processFields[k as keyof ExtractedProcessFields]
       );
     }
+    emit("save", "done", `${result.fieldsExtracted.length} campo(s) salvo(s)`);
     return result;
   }
+
+  emit("match", "active", "Localizando cliente no cadastro");
 
   if (!clientFolderId) {
     result.skipped = true;
     result.skipReason = "Não foi possível determinar a pasta do cliente";
+    emit("match", "skip", result.skipReason);
     return result;
   }
 
   let clientId =
     (await findClientByDriveFolderId(clientFolderId)) ??
     (await findClientByFolderName(clientFolderId));
+
+  emit("match", "done", clientId ? "Cliente já cadastrado localizado" : "Novo cliente será cadastrado");
+  emit("save", "active", "Salvando dados no cadastro");
 
   if (!clientId) {
     const folderName = await getFolderName(clientFolderId);
@@ -531,6 +554,7 @@ export async function readDriveFile(
     if (!dbStatus) {
       result.skipped = true;
       result.skipReason = "Pasta do cliente não está dentro de uma pasta de status conhecida";
+      emit("save", "skip", result.skipReason);
       return result;
     }
 
@@ -542,6 +566,7 @@ export async function readDriveFile(
     if (!displayName) {
       result.skipped = true;
       result.skipReason = "Não foi possível determinar o nome do cliente";
+      emit("save", "skip", result.skipReason);
       return result;
     }
 
@@ -578,6 +603,7 @@ export async function readDriveFile(
       console.error("[AIReader] Erro ao criar cliente:", error);
       result.skipped = true;
       result.skipReason = `Erro ao criar cliente: ${error.message}`;
+      emit("save", "error", result.skipReason);
       return result;
     }
 
@@ -624,6 +650,7 @@ export async function readDriveFile(
   }
 
   result.clientId = clientId;
+  emit("save", "done", `${result.fieldsExtracted.length} campo(s) salvo(s)`);
   return result;
 }
 

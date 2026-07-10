@@ -2,21 +2,25 @@
 
 import { useEffect, useRef, useState } from "react";
 import {
+  CheckCircle2,
   ChevronRight,
+  Circle,
   FileText,
   Folder,
   Home,
   Loader2,
+  MinusCircle,
   Plus,
   Sparkles,
   Trash2,
   Upload,
-  X
+  X,
+  XCircle
 } from "lucide-react";
 import type { DriveFile } from "@/app/api/drive/arquivos/route";
 import { useDriveActions } from "@/hooks/useDriveActions";
 import { useDriveNavigation } from "@/hooks/useDriveNavigation";
-import { useGoogleDriveUpload } from "@/hooks/useGoogleDriveUpload";
+import { useGoogleDriveUpload, type UploadStep } from "@/hooks/useGoogleDriveUpload";
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
 
@@ -154,6 +158,43 @@ function DriveFileRow({ file, isDeleting, onNavigate, onDelete }: DriveFileRowPr
   );
 }
 
+function UploadTimeline({ steps }: { steps: UploadStep[] }) {
+  return (
+    <div className="mx-5 mt-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
+      <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+        Processamento do robô
+      </p>
+      <ul className="space-y-1.5">
+        {steps.map((step) => (
+          <li key={step.id} className="flex items-center gap-2 text-sm">
+            {step.status === "done" && <CheckCircle2 size={15} className="shrink-0 text-emerald-500" />}
+            {step.status === "active" && <Loader2 size={15} className="shrink-0 animate-spin text-navy-700" />}
+            {step.status === "pending" && <Circle size={14} className="shrink-0 text-slate-300" />}
+            {step.status === "skip" && <MinusCircle size={15} className="shrink-0 text-slate-300" />}
+            {step.status === "error" && <XCircle size={15} className="shrink-0 text-red-500" />}
+            <span
+              className={
+                step.status === "pending"
+                  ? "text-slate-400"
+                  : step.status === "error"
+                  ? "text-red-600"
+                  : step.status === "skip"
+                  ? "text-slate-400 line-through"
+                  : "text-slate-700"
+              }
+            >
+              {step.label}
+            </span>
+            {step.message && step.status !== "pending" && (
+              <span className="text-xs text-slate-400">— {step.message}</span>
+            )}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function DriveBrowser({
   isOpen,
   rootFolderId,
@@ -189,7 +230,7 @@ export function DriveBrowser({
     onError: setError
   });
 
-  const { isUploading, isAuthorized, isAuthorizing, requestAuthorization, uploadFile, fileInputRef } = useGoogleDriveUpload();
+  const { isUploading, isAuthorized, isAuthorizing, requestAuthorization, uploadFile, fileInputRef, steps } = useGoogleDriveUpload();
 
   useEffect(() => {
     if (navError) setError(navError);
@@ -323,6 +364,7 @@ export function DriveBrowser({
         </div>
 
         <div className="flex-1 overflow-y-auto">
+          {steps.length > 0 && <UploadTimeline steps={steps} />}
           {error && (
             <div className="mx-5 mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
               {error}
