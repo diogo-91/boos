@@ -123,7 +123,15 @@ export function useGoogleDriveUpload() {
     async (file: File, folderId: string, onDone: (msg?: string) => void, onError: (msg: string) => void) => {
       let token = accessTokenRef.current;
       if (!token && hasConsented()) {
-        try { token = await getToken(true); } catch { setIsAuthorized(false); }
+        try {
+          token = await getToken(true);
+        } catch {
+          try {
+            token = await getToken(false);
+          } catch {
+            setIsAuthorized(false);
+          }
+        }
       }
 
       if (!token) {
