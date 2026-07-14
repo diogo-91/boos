@@ -396,6 +396,16 @@ async function findClientByFolderName(folderId: string): Promise<string | null> 
   return found?.id ?? null;
 }
 
+async function findClientByCpfCnpj(cpfCnpj: string | undefined): Promise<string | null> {
+  if (!cpfCnpj) return null;
+  const { data } = await getSupabaseClient()
+    .from("clientes")
+    .select("id")
+    .eq("cpf_cnpj", cpfCnpj)
+    .maybeSingle();
+  return data?.id ?? null;
+}
+
 async function findProcessByDriveFolderId(folderId: string) {
   const { data } = await getSupabaseClient()
     .from("processos")
@@ -600,6 +610,37 @@ export async function readDriveFile(
     });
 
     if (error) {
+      // CPF/CNPJ já cadastrado em outro cliente — provavelmente o mesmo cliente
+      // com um documento chegando por uma pasta diferente. Atualiza o existente
+      // em vez de falhar, sem sobrescrever a pasta já vinculada a ele.
+      if (error.code === "23505" && safe.cpf_cnpj) {
+        const existingId = await findClientByCpfCnpj(safe.cpf_cnpj);
+        if (existingId) {
+          await updateClientFields(existingId, {
+            nome: displayName,
+            rg_ie: safe.rg_ie,
+            data_nascimento_abertura: safe.data_nascimento_abertura,
+            estado_civil: safe.estado_civil,
+            endereco: safe.endereco,
+            nome_fantasia: safe.nome_fantasia,
+            telefone: safe.telefone,
+            email: safe.email
+          });
+          clientId = existingId;
+          result.fieldsExtracted = [
+            ...(extracted.rg_ie ? ["rg_ie"] : []),
+            ...(extracted.data_nascimento_abertura ? ["data_nascimento_abertura"] : []),
+            ...(extracted.estado_civil ? ["estado_civil"] : []),
+            ...(extracted.endereco ? ["endereco"] : []),
+            ...(extracted.telefone ? ["telefone"] : []),
+            ...(extracted.email ? ["email"] : [])
+          ];
+          emit("save", "done", "CPF/CNPJ já cadastrado — cliente existente atualizado");
+          result.clientId = clientId;
+          return result;
+        }
+      }
+
       console.error("[AIReader] Erro ao criar cliente:", error);
       result.skipped = true;
       result.skipReason = `Erro ao criar cliente: ${error.message}`;
