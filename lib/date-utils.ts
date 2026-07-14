@@ -2,6 +2,15 @@ export function todayInputValue() {
   return new Date().toISOString().slice(0, 10);
 }
 
+export function formatSyncTimestamp(iso: string) {
+  return new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit"
+  });
+}
+
 export function formatInputDate(value: string) {
   if (!value) return "—";
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(value) || value === "—") return value;

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import {
   Users,
@@ -11,24 +11,12 @@ import {
   AlertCircle,
   FolderOpen,
   BarChart3,
-  Calendar,
   Activity
 } from "lucide-react";
 import { useOperationalData } from "@/components/OperationalDataProvider";
 import { STATUS_OPTIONS } from "@/lib/domain";
 import { StatusBadge } from "@/components/StatusBadge";
-import { getLastDriveSyncAt } from "@/services/drive-sync-status";
-
-const DRIVE_SYNC_POLL_MS = 60_000;
-
-function formatSyncTimestamp(iso: string) {
-  return new Date(iso).toLocaleString("pt-BR", {
-    day: "2-digit",
-    month: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit"
-  });
-}
+import { DriveSyncStatus } from "@/components/DriveSyncStatus";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -127,27 +115,6 @@ function BarRow({ label, count, total, color }: { label: string; count: number; 
 
 export function DashboardView() {
   const { clients, processes, isLoading } = useOperationalData();
-  const [lastDriveSyncAt, setLastDriveSyncAt] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadLastSync() {
-      try {
-        const value = await getLastDriveSyncAt();
-        if (!cancelled) setLastDriveSyncAt(value);
-      } catch (error) {
-        console.error("[Dashboard] Falha ao buscar última sincronização do Drive:", error);
-      }
-    }
-
-    loadLastSync();
-    const interval = window.setInterval(loadLastSync, DRIVE_SYNC_POLL_MS);
-    return () => {
-      cancelled = true;
-      window.clearInterval(interval);
-    };
-  }, []);
 
   const stats = useMemo(() => {
     // ── Clientes por status ──────────────────────────────────────────────────
@@ -465,12 +432,7 @@ export function DashboardView() {
       </div>
 
       {/* ── Rodapé: data de atualização ─────────────────────────────────── */}
-      <div className="flex items-center gap-2 text-xs text-slate-400">
-        <Calendar size={12} />
-        {lastDriveSyncAt
-          ? `Drive sincronizado pela última vez em ${formatSyncTimestamp(lastDriveSyncAt)} · atualiza automaticamente a cada 15 minutos`
-          : "Sincronização automática do Drive a cada 15 minutos"}
-      </div>
+      <DriveSyncStatus />
     </section>
   );
 }
