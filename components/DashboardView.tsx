@@ -16,7 +16,6 @@ import {
 import { useOperationalData } from "@/components/OperationalDataProvider";
 import { STATUS_OPTIONS } from "@/lib/domain";
 import { StatusBadge } from "@/components/StatusBadge";
-import { DriveSyncStatus } from "@/components/DriveSyncStatus";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
@@ -430,9 +429,6 @@ export function DashboardView() {
           )}
         </Card>
       </div>
-
-      {/* ── Rodapé: data de atualização ─────────────────────────────────── */}
-      <DriveSyncStatus />
     </section>
   );
 }

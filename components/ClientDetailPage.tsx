@@ -8,7 +8,6 @@ import { useOperationalData } from "@/components/OperationalDataProvider";
 import { syncClientDriveFolder } from "@/services/drive-sync";
 import { DriveFolderCard } from "@/components/DriveFolderCard";
 import { DriveBrowser } from "@/components/DriveBrowser";
-import { DriveSyncStatus } from "@/components/DriveSyncStatus";
 import { EmptyState } from "@/components/EmptyState";
 import { ClientFormModal } from "@/components/forms/ClientFormModal";
 import { ProcessFormModal } from "@/components/forms/ProcessFormModal";
@@ -222,13 +221,12 @@ export function ClientDetailPage({ clientId }: ClientDetailPageProps) {
           </SectionCard>
 
           <SectionCard title="Pasta no Drive">
-            <div id="pasta-drive" className="space-y-3">
+            <div id="pasta-drive">
               <DriveFolderCard
                 path={client.driveFolder}
                 folderId={effectiveDriveFolderId}
                 onOpenBrowser={() => setIsDriveBrowserOpen(true)}
               />
-              <DriveSyncStatus />
             </div>
           </SectionCard>
         </div>

@@ -6,6 +6,7 @@ import { usePathname, useRouter } from "next/navigation";
 import { LogOut, LayoutDashboard, Users, Menu, X } from "lucide-react";
 import { useState } from "react";
 import { getSupabaseBrowserClient } from "@/lib/supabase/browser";
+import { DriveSyncStatus } from "@/components/DriveSyncStatus";
 
 const NAV_LINKS = [
   { href: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
@@ -92,6 +93,11 @@ export function AppHeader() {
             {menuOpen ? <X size={18} /> : <Menu size={18} />}
           </button>
         </div>
+      </div>
+
+      {/* Status de sincronização do Drive */}
+      <div className="border-t border-white/10 px-4 py-1.5 sm:px-6 lg:px-8">
+        <DriveSyncStatus textClassName="text-white/50" />
       </div>
 
       {/* Menu mobile dropdown */}

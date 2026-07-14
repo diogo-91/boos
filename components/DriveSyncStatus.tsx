@@ -7,7 +7,13 @@ import { formatSyncTimestamp } from "@/lib/date-utils";
 
 const DRIVE_SYNC_POLL_MS = 60_000;
 
-export function DriveSyncStatus({ className = "" }: { className?: string }) {
+export function DriveSyncStatus({
+  className = "",
+  textClassName = "text-slate-400"
+}: {
+  className?: string;
+  textClassName?: string;
+}) {
   const [lastDriveSyncAt, setLastDriveSyncAt] = useState<string | null>(null);
 
   useEffect(() => {
@@ -31,7 +37,7 @@ export function DriveSyncStatus({ className = "" }: { className?: string }) {
   }, []);
 
   return (
-    <div className={`flex items-center gap-2 text-xs text-slate-400 ${className}`}>
+    <div className={`flex items-center gap-2 text-xs ${textClassName} ${className}`}>
       <Calendar size={12} />
       {lastDriveSyncAt
         ? `Drive sincronizado pela última vez em ${formatSyncTimestamp(lastDriveSyncAt)} · atualiza automaticamente a cada 15 minutos`
