@@ -33,24 +33,12 @@ export async function POST(request: Request) {
     );
   }
 
-  const ALLOWED_TYPES = [
-    "application/pdf",
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "image/gif",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/msword",
-    "application/vnd.oasis.opendocument.text",
-    "application/rtf",
-    "text/rtf",
-    "text/plain"
-  ];
+  const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif"];
   const MAX_SIZE_BYTES = 20 * 1024 * 1024; // 20MB
 
   if (!ALLOWED_TYPES.includes(file.type)) {
     return NextResponse.json(
-      { message: `Tipo de arquivo não permitido: ${file.type}. Envie PDF, Word (doc/docx), imagem (JPG, PNG, WEBP) ou texto.` },
+      { message: `Tipo de arquivo não permitido: ${file.type}. Envie PDF ou imagem (JPG, PNG, WEBP).` },
       { status: 400 }
     );
   }
