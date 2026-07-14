@@ -119,6 +119,30 @@ export function useGoogleDriveUpload() {
     }
   }, [getToken]);
 
+  // Garante um token válido ainda dentro do clique do usuário (o navegador só
+  // permite popup do Google nesse momento). Se deixarmos essa renovação pra
+  // depois que o seletor nativo de arquivo já fechou, o popup é bloqueado
+  // silenciosamente ("window.open blocked due to active file chooser").
+  const openFilePicker = useCallback(
+    async (onError: (msg: string) => void) => {
+      if (!accessTokenRef.current) {
+        try {
+          accessTokenRef.current = await getToken(true);
+        } catch {
+          try {
+            accessTokenRef.current = await getToken(false);
+          } catch {
+            setIsAuthorized(false);
+            onError("Autorize o acesso ao Google Drive primeiro.");
+            return;
+          }
+        }
+      }
+      fileInputRef.current?.click();
+    },
+    [getToken]
+  );
+
   const uploadFile = useCallback(
     async (file: File, folderId: string, onDone: (msg?: string) => void, onError: (msg: string) => void) => {
       let token = accessTokenRef.current;
@@ -186,7 +210,16 @@ export function useGoogleDriveUpload() {
     [getToken, updateStep]
   );
 
-  return { isUploading, isAuthorized, isAuthorizing, requestAuthorization, uploadFile, fileInputRef, steps };
+  return {
+    isUploading,
+    isAuthorized,
+    isAuthorizing,
+    requestAuthorization,
+    openFilePicker,
+    uploadFile,
+    fileInputRef,
+    steps
+  };
 }
 
 type ReadFileResult = {

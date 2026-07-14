@@ -230,7 +230,7 @@ export function DriveBrowser({
     onError: setError
   });
 
-  const { isUploading, isAuthorized, isAuthorizing, requestAuthorization, uploadFile, fileInputRef, steps } = useGoogleDriveUpload();
+  const { isUploading, isAuthorized, isAuthorizing, requestAuthorization, openFilePicker, uploadFile, fileInputRef, steps } = useGoogleDriveUpload();
 
   useEffect(() => {
     if (navError) setError(navError);
@@ -297,7 +297,7 @@ export function DriveBrowser({
             ) : (
               <>
                 <button
-                  onClick={() => fileInputRef.current?.click()}
+                  onClick={() => openFilePicker(setError)}
                   disabled={isUploading}
                   className="flex items-center gap-2 rounded-md bg-navy-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-navy-700 disabled:opacity-60"
                 >
