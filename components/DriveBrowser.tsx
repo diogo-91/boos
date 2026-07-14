@@ -230,7 +230,7 @@ export function DriveBrowser({
     onError: setError
   });
 
-  const { isUploading, isAuthorized, isAuthorizing, requestAuthorization, uploadFile, fileInputRef, steps } = useGoogleDriveUpload();
+  const { isUploading, uploadFile, fileInputRef, steps } = useGoogleDriveUpload();
 
   useEffect(() => {
     if (navError) setError(navError);
@@ -282,49 +282,33 @@ export function DriveBrowser({
               <Plus size={15} />
               Nova Pasta
             </button>
-            {!isAuthorized ? (
-              <button
-                onClick={() => requestAuthorization(setError)}
-                disabled={isAuthorizing}
-                className="flex items-center gap-2 rounded-md bg-navy-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-navy-700 disabled:opacity-60"
-              >
-                {isAuthorizing
-                  ? <Loader2 size={15} className="animate-spin" />
-                  : <Upload size={15} />
+            <button
+              onClick={() => fileInputRef.current?.click()}
+              disabled={isUploading}
+              className="flex items-center gap-2 rounded-md bg-navy-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-navy-700 disabled:opacity-60"
+            >
+              {isUploading
+                ? <Loader2 size={15} className="animate-spin" />
+                : <Upload size={15} />
+              }
+              {isUploading ? "Enviando..." : "Upload Arquivo"}
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0];
+                if (file) {
+                  uploadFile(
+                    file,
+                    currentFolderId,
+                    (msg) => { refresh(); setError(null); setAiMessage(msg ?? null); },
+                    setError
+                  );
                 }
-                {isAuthorizing ? "Autorizando..." : "Autorizar upload"}
-              </button>
-            ) : (
-              <>
-                <button
-                  onClick={() => fileInputRef.current?.click()}
-                  disabled={isUploading}
-                  className="flex items-center gap-2 rounded-md bg-navy-800 px-3 py-2 text-sm font-medium text-white transition hover:bg-navy-700 disabled:opacity-60"
-                >
-                  {isUploading
-                    ? <Loader2 size={15} className="animate-spin" />
-                    : <Upload size={15} />
-                  }
-                  {isUploading ? "Enviando..." : "Upload Arquivo"}
-                </button>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  className="hidden"
-                  onChange={(e) => {
-                    const file = e.target.files?.[0];
-                    if (file) {
-                      uploadFile(
-                        file,
-                        currentFolderId,
-                        (msg) => { refresh(); setError(null); setAiMessage(msg ?? null); },
-                        setError
-                      );
-                    }
-                  }}
-                />
-              </>
-            )}
+              }}
+            />
             <button
               onClick={onClose}
               className="ml-1 flex h-8 w-8 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-100 hover:text-slate-700"

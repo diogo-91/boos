@@ -1,28 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        oauth2: {
-          initTokenClient: (config: {
-            client_id: string;
-            scope: string;
-            prompt?: string;
-            callback: (response: { access_token?: string; error?: string }) => void;
-          }) => { requestAccessToken: (opts?: { prompt?: string }) => void };
-        };
-      };
-    };
-  }
-}
-
-const CLIENT_ID = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ?? "";
-const ACCOUNT_HINT = process.env.NEXT_PUBLIC_GOOGLE_UPLOAD_ACCOUNT_HINT;
-const SCOPE = "https://www.googleapis.com/auth/drive.file";
-const LS_CONSENTED_KEY = "gd_consented";
+import { useCallback, useRef, useState } from "react";
 
 export type UploadStepId = "upload" | "context" | "download" | "ai" | "match" | "save";
 export type UploadStepStatus = "pending" | "active" | "done" | "skip" | "error";
@@ -43,137 +21,39 @@ function initialSteps(): UploadStep[] {
   return STEP_ORDER.map((id) => ({ id, label: STEP_LABELS[id], status: "pending" as const }));
 }
 
-function hasConsented(): boolean {
-  try { return localStorage.getItem(LS_CONSENTED_KEY) === "1"; } catch { return false; }
-}
-
-function markConsented() {
-  try { localStorage.setItem(LS_CONSENTED_KEY, "1"); } catch {}
-}
-
 export function useGoogleDriveUpload() {
   const [isUploading, setIsUploading] = useState(false);
-  const [isAuthorized, setIsAuthorized] = useState(false);
-  const [isAuthorizing, setIsAuthorizing] = useState(false);
   const [steps, setSteps] = useState<UploadStep[]>([]);
-  const accessTokenRef = useRef<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const updateStep = useCallback((id: UploadStepId, status: UploadStepStatus, message?: string) => {
     setSteps((prev) => prev.map((s) => (s.id === id ? { ...s, status, message } : s)));
   }, []);
 
-  useEffect(() => {
-    if (!CLIENT_ID || document.getElementById("gsi-script")) return;
-    const script = document.createElement("script");
-    script.id = "gsi-script";
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.defer = true;
-    document.head.appendChild(script);
-  }, []);
-
-  const getToken = useCallback((silent: boolean): Promise<string> => {
-    return new Promise<string>((resolve, reject) => {
-      const tryInit = () => {
-        if (!window.google?.accounts?.oauth2) {
-          setTimeout(tryInit, 300);
-          return;
-        }
-
-        const client = window.google.accounts.oauth2.initTokenClient({
-          client_id: CLIENT_ID,
-          scope: SCOPE,
-          ...(ACCOUNT_HINT ? { login_hint: ACCOUNT_HINT } : {}),
-          callback: (response) => {
-            if (response.access_token) {
-              accessTokenRef.current = response.access_token;
-              markConsented();
-              setIsAuthorized(true);
-              resolve(response.access_token);
-            } else {
-              reject(new Error(silent ? "silent_fail" : "Autorização negada pelo Google."));
-            }
-          }
-        });
-
-        client.requestAccessToken({ prompt: silent ? "" : "select_account" });
-      };
-
-      tryInit();
-    });
-  }, []);
-
-  useEffect(() => {
-    if (hasConsented()) setIsAuthorized(true);
-  }, []);
-
-  const requestAuthorization = useCallback(async (onError: (msg: string) => void) => {
-    setIsAuthorizing(true);
-    try {
-      await getToken(false);
-    } catch (err) {
-      onError(err instanceof Error ? err.message : "Erro ao autorizar.");
-    } finally {
-      setIsAuthorizing(false);
-    }
-  }, [getToken]);
-
   const uploadFile = useCallback(
     async (file: File, folderId: string, onDone: (msg?: string) => void, onError: (msg: string) => void) => {
-      let token = accessTokenRef.current;
-      if (!token && hasConsented()) {
-        try {
-          token = await getToken(true);
-        } catch {
-          try {
-            token = await getToken(false);
-          } catch {
-            setIsAuthorized(false);
-          }
-        }
-      }
-
-      if (!token) {
-        onError("Autorize o acesso ao Google Drive primeiro.");
-        return;
-      }
-
       setIsUploading(true);
       setSteps(initialSteps());
       updateStep("upload", "active");
       try {
         const form = new FormData();
-        form.append(
-          "metadata",
-          new Blob([JSON.stringify({ name: file.name, parents: [folderId] })], { type: "application/json" })
-        );
         form.append("file", file);
+        form.append("parentId", folderId);
 
-        const upload = (t: string) =>
-          fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name", {
-            method: "POST",
-            headers: { Authorization: `Bearer ${t}` },
-            body: form
-          });
+        const response = await fetch("/api/drive/upload", {
+          method: "POST",
+          body: form
+        });
 
-        let response = await upload(token);
+        const data = (await response.json()) as { file?: { id: string; name: string }; message?: string };
 
-        if (response.status === 401) {
-          accessTokenRef.current = null;
-          const newToken = await getToken(true);
-          response = await upload(newToken);
-        }
-
-        if (!response.ok) {
-          const data = await response.json() as { error?: { message?: string } };
-          throw new Error(data.error?.message ?? "Falha ao enviar o arquivo.");
+        if (!response.ok || !data.file) {
+          throw new Error(data.message ?? "Falha ao enviar o arquivo.");
         }
 
         updateStep("upload", "done");
 
-        const uploaded = await response.json() as { id: string; name: string };
-        await notifyReadFile(uploaded.id, uploaded.name ?? file.name, folderId, onDone, updateStep);
+        await notifyReadFile(data.file.id, data.file.name ?? file.name, folderId, onDone, updateStep);
         setSteps((prev) => prev.map((s) => (s.status === "pending" ? { ...s, status: "skip" } : s)));
       } catch (err) {
         updateStep("upload", "error", err instanceof Error ? err.message : "Erro no upload.");
@@ -183,10 +63,10 @@ export function useGoogleDriveUpload() {
         if (fileInputRef.current) fileInputRef.current.value = "";
       }
     },
-    [getToken, updateStep]
+    [updateStep]
   );
 
-  return { isUploading, isAuthorized, isAuthorizing, requestAuthorization, uploadFile, fileInputRef, steps };
+  return { isUploading, uploadFile, fileInputRef, steps };
 }
 
 type ReadFileResult = {
