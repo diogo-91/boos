@@ -10,7 +10,7 @@ import {
   uniqueBillingModels,
   uniquePartners
 } from "@/lib/client-queries";
-import { getPartnerLabel, getProcessCountLabel } from "@/lib/client-view-model";
+import { formatDocument, getPartnerLabel, getProcessCountLabel } from "@/lib/client-view-model";
 import { CLIENT_STATUS_FILTERS, PROCESS_STATUS_FILTERS } from "@/lib/domain";
 import { DriveBrowser } from "@/components/DriveBrowser";
 import { ClientCard } from "@/components/ClientCard";
@@ -168,7 +168,7 @@ export function ClientsView() {
                 render: (client) => (
                   <div>
                     <p className="font-semibold text-slate-950">{client.name}</p>
-                    <p className="mt-1 text-xs text-slate-500">{client.document}</p>
+                    <p className="mt-1 text-xs text-slate-500">{formatDocument(client.document)}</p>
                   </div>
                 )
               },

@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { useOperationalData } from "@/components/OperationalDataProvider";
 import { STATUS_OPTIONS } from "@/lib/domain";
+import { formatDocument } from "@/lib/client-view-model";
 import { StatusBadge } from "@/components/StatusBadge";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -382,7 +383,7 @@ export function DashboardView() {
                 >
                   <div className="min-w-0">
                     <p className="truncate text-sm font-semibold text-slate-900">{c.name}</p>
-                    <p className="text-xs text-slate-400">{c.document}</p>
+                    <p className="text-xs text-slate-400">{formatDocument(c.document)}</p>
                   </div>
                   <StatusBadge status={c.status} />
                 </Link>

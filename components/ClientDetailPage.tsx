@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useState } from "react";
 import type { ClientStatus } from "@/lib/types";
 import { STATUS_OPTIONS } from "@/lib/domain";
+import { formatDocument } from "@/lib/client-view-model";
 import { useOperationalData } from "@/components/OperationalDataProvider";
 import { syncClientDriveFolder } from "@/services/drive-sync";
 import { DriveFolderCard } from "@/components/DriveFolderCard";
@@ -163,7 +164,7 @@ export function ClientDetailPage({ clientId }: ClientDetailPageProps) {
             <InfoGrid
               items={[
                 { label: "Tipo", value: client.personType },
-                { label: "CPF / CNPJ", value: client.document },
+                { label: "CPF / CNPJ", value: formatDocument(client.document) },
                 { label: "RG / Inscrição Estadual", value: client.secondaryDocument },
                 { label: "Nome Completo / Razão Social", value: client.legalName },
                 { label: "Data de Nascimento / Abertura", value: client.birthOrOpeningDate },

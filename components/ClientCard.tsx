@@ -1,6 +1,6 @@
 import Link from "next/link";
 import type { Client } from "@/lib/types";
-import { getPartnerLabel, getProcessCountLabel } from "@/lib/client-view-model";
+import { formatDocument, getPartnerLabel, getProcessCountLabel } from "@/lib/client-view-model";
 import { StatusBadge } from "@/components/StatusBadge";
 
 type ClientCardProps = {
@@ -13,7 +13,7 @@ export function ClientCard({ client }: ClientCardProps) {
       <div className="flex items-start justify-between gap-2 sm:gap-3">
         <div>
           <h3 className="font-semibold text-slate-950">{client.name}</h3>
-          <p className="mt-1 text-sm text-slate-500">{client.document}</p>
+          <p className="mt-1 text-sm text-slate-500">{formatDocument(client.document)}</p>
         </div>
         <StatusBadge status={client.status} />
       </div>
