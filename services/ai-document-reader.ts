@@ -429,6 +429,27 @@ async function getParentFolderId(folderId: string): Promise<string | null> {
   return data.parents?.[0] ?? null;
 }
 
+async function getFileModifiedTime(fileId: string): Promise<string | null> {
+  const drive = getGoogleDriveClient();
+  const { data } = await drive.files.get({ fileId, fields: "modifiedTime" });
+  return data.modifiedTime ?? null;
+}
+
+async function getProcessedFileModifiedTime(fileId: string): Promise<string | null> {
+  const { data } = await getSupabaseClient()
+    .from("documentos_processados")
+    .select("modified_time")
+    .eq("file_id", fileId)
+    .maybeSingle();
+  return data?.modified_time ?? null;
+}
+
+async function markFileProcessed(fileId: string, modifiedTime: string | null): Promise<void> {
+  await getSupabaseClient()
+    .from("documentos_processados")
+    .upsert({ file_id: fileId, modified_time: modifiedTime, processed_at: new Date().toISOString() });
+}
+
 async function getStatusFolderMap(): Promise<Record<string, string>> {
   const drive = getGoogleDriveClient();
   const { data } = await drive.files.list({
@@ -482,6 +503,19 @@ export async function readDriveFile(
 
   emit("context", "active", "Identificando pasta e tipo de documento");
 
+  const modifiedTime = await getFileModifiedTime(fileId);
+  const processedModifiedTime = await getProcessedFileModifiedTime(fileId);
+  if (
+    processedModifiedTime &&
+    modifiedTime &&
+    new Date(processedModifiedTime).getTime() === new Date(modifiedTime).getTime()
+  ) {
+    result.skipped = true;
+    result.skipReason = "Arquivo já processado, sem alterações desde a última leitura";
+    emit("context", "skip", result.skipReason);
+    return result;
+  }
+
   const grandParentId = await getParentFolderId(parentFolderId);
   const statusMap = await getStatusFolderMap();
 
@@ -517,6 +551,7 @@ export async function readDriveFile(
     result.skipped = true;
     result.skipReason = "Arquivo muito grande para leitura automática";
     emit("download", "skip", result.skipReason);
+    await markFileProcessed(fileId, modifiedTime);
     return result;
   }
   emit("download", "done");
@@ -524,6 +559,7 @@ export async function readDriveFile(
   emit("ai", "active", "Lendo documento com IA");
   const extracted = await extractWithClaude(fileData.content, fileData.mimeType, docType, fileName);
   emit("ai", "done", `${Object.keys(extracted).length} campo(s) identificado(s)`);
+  await markFileProcessed(fileId, modifiedTime);
 
   if (result.processId) {
     emit("match", "done", "Processo já vinculado a esta pasta");
