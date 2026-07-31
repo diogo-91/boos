@@ -19,6 +19,7 @@ async function listChildren(parentId: string) {
     const { data } = await drive.files.list({
       q: `'${parentId}' in parents and trashed = false`,
       fields: "nextPageToken,files(id,name,mimeType)",
+      orderBy: "name",
       pageSize: 100,
       pageToken
     });
@@ -31,6 +32,34 @@ async function listChildren(parentId: string) {
   } while (pageToken);
 
   return items;
+}
+
+type ScanCheckpoint = { statusFolderId: string | null; clienteFolderId: string | null };
+
+async function getCheckpoint(): Promise<ScanCheckpoint> {
+  const { data } = await getSupabaseClient()
+    .from("drive_scan_checkpoint")
+    .select("status_folder_id,cliente_folder_id")
+    .eq("id", "singleton")
+    .maybeSingle();
+
+  return {
+    statusFolderId: data?.status_folder_id ?? null,
+    clienteFolderId: data?.cliente_folder_id ?? null
+  };
+}
+
+async function saveCheckpoint(statusFolderId: string | null, clienteFolderId: string | null) {
+  await getSupabaseClient().from("drive_scan_checkpoint").upsert({
+    id: "singleton",
+    status_folder_id: statusFolderId,
+    cliente_folder_id: clienteFolderId,
+    updated_at: new Date().toISOString()
+  });
+}
+
+async function clearCheckpoint() {
+  await saveCheckpoint(null, null);
 }
 
 async function findClienteByFolderId(folderId: string) {
@@ -159,9 +188,16 @@ export type FullScanResult = {
   filesSkipped: number;
   fileDetails: FileReadDetail[];
   errors: string[];
+  timedOut: boolean;
+  resumedFromCheckpoint: boolean;
 };
 
+// Deixa margem de segurança para o limite de 5 min (300s) da function.
+const MAX_DURATION_MS = 4.5 * 60 * 1000;
+
 export async function runFullScan(): Promise<FullScanResult> {
+  const startedAt = Date.now();
+
   const result: FullScanResult = {
     clientesFound: 0,
     clientesCreated: 0,
@@ -170,8 +206,15 @@ export async function runFullScan(): Promise<FullScanResult> {
     filesRead: 0,
     filesSkipped: 0,
     fileDetails: [],
-    errors: []
+    errors: [],
+    timedOut: false,
+    resumedFromCheckpoint: false
   };
+
+  const checkpoint = await getCheckpoint();
+  result.resumedFromCheckpoint = Boolean(checkpoint.statusFolderId);
+  let skipUntilStatusFolder = Boolean(checkpoint.statusFolderId);
+  let skipUntilClienteFolder = Boolean(checkpoint.clienteFolderId);
 
   const rootId = getGoogleDriveRootFolderId();
   const rootChildren = await listChildren(rootId);
@@ -187,11 +230,23 @@ export async function runFullScan(): Promise<FullScanResult> {
     if (matched) statusFolders.push({ id: item.id, name: item.name, status: matched[1] });
   }
 
-  for (const statusFolder of statusFolders) {
+  statusLoop: for (const statusFolder of statusFolders) {
+    if (skipUntilStatusFolder) {
+      if (statusFolder.id !== checkpoint.statusFolderId) continue;
+      skipUntilStatusFolder = false;
+    }
+
     const clienteFolders = await listChildren(statusFolder.id);
 
     for (const clienteItem of clienteFolders) {
       if (clienteItem.mimeType !== FOLDER_MIME) continue;
+
+      if (skipUntilClienteFolder) {
+        if (clienteItem.id !== checkpoint.clienteFolderId) continue;
+        // Esse cliente já foi totalmente processado antes da última parada — pula ele também.
+        skipUntilClienteFolder = false;
+        continue;
+      }
 
       result.clientesFound++;
 
@@ -267,7 +322,17 @@ export async function runFullScan(): Promise<FullScanResult> {
           }
         }
       }
+
+      if (Date.now() - startedAt > MAX_DURATION_MS) {
+        await saveCheckpoint(statusFolder.id, clienteItem.id);
+        result.timedOut = true;
+        break statusLoop;
+      }
     }
+  }
+
+  if (!result.timedOut) {
+    await clearCheckpoint();
   }
 
   return result;
