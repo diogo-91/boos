@@ -8,6 +8,7 @@ import type {
 } from "@/lib/types";
 import { generateId } from "@/lib/id";
 import { formatInputDate, formatTodayBR } from "@/lib/date-utils";
+import { normalizeDocument } from "@/lib/validation";
 
 export function attachProcessIds(clients: Client[], processes: LegalProcess[]) {
   return clients.map((client) => ({
@@ -46,7 +47,7 @@ export function makeClient(values: ClientFormValues, existing?: Client): Client 
     partnerId: existing?.partnerId ?? null,
     legalName: values.legalName,
     tradeName: values.tradeName,
-    document: values.document,
+    document: normalizeDocument(values.document),
     secondaryDocument: values.secondaryDocument,
     birthOrOpeningDate: formatInputDate(values.birthOrOpeningDate),
     maritalStatus: values.maritalStatus,

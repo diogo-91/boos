@@ -3,6 +3,7 @@ import mammoth from "mammoth";
 import { getGoogleDriveClient, getGoogleDriveRootFolderId } from "@/lib/google/drive";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { STATUS_FOLDER_TO_DB_MAP, folderNameToDisplayName } from "@/lib/drive-status-map";
+import { normalizeDocument } from "@/lib/validation";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -303,6 +304,13 @@ function sanitizeValue(key: string, raw: unknown): string | null {
     if (br) return `${br[3]}-${br[2]}-${br[1]}`;
     // Não reconhecido — descarta para não quebrar o banco
     return null;
+  }
+
+  // CPF/CNPJ: guarda só os dígitos, sem pontuação, para bater com
+  // qualquer outro cadastro do mesmo documento independente de formatação
+  if (key === "cpf_cnpj") {
+    const digits = normalizeDocument(v);
+    return digits || null;
   }
 
   return v;
