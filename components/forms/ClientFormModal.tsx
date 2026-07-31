@@ -5,6 +5,7 @@ import type { Client } from "@/lib/types";
 import type { ClientFormValues } from "@/components/OperationalDataProvider";
 import { toInputDate } from "@/lib/date-utils";
 import { STATUS_OPTIONS } from "@/lib/domain";
+import { findDuplicateClient } from "@/lib/client-queries";
 import { isValidEmail, isValidPercent } from "@/lib/validation";
 import { FormField } from "@/components/forms/FormField";
 import { DateInput, SelectInput, TextInput } from "@/components/forms/inputs";
@@ -14,6 +15,7 @@ import { Modal } from "@/components/ui/Modal";
 type ClientFormModalProps = {
   isOpen: boolean;
   client?: Client;
+  clients?: Client[];
   onClose: () => void;
   onSubmit: (values: ClientFormValues) => Promise<unknown>;
 };
@@ -39,10 +41,18 @@ function getInitialValues(client?: Client): ClientFormValues {
   };
 }
 
-export function ClientFormModal({ isOpen, client, onClose, onSubmit }: ClientFormModalProps) {
+export function ClientFormModal({
+  isOpen,
+  client,
+  clients = [],
+  onClose,
+  onSubmit
+}: ClientFormModalProps) {
   const initialValues = useMemo(() => getInitialValues(client), [client]);
   const [values, setValues] = useState<ClientFormValues>(initialValues);
   const [errors, setErrors] = useState<ClientFormErrors>({});
+  const [duplicateWarning, setDuplicateWarning] = useState<string | null>(null);
+  const [duplicateConfirmed, setDuplicateConfirmed] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
   // Se o cliente já estiver em um status legado (Dativo, Parceiros, Sarandi),
@@ -56,6 +66,10 @@ export function ClientFormModal({ isOpen, client, onClose, onSubmit }: ClientFor
     value: ClientFormValues[K]
   ) {
     setValues((prev) => ({ ...prev, [field]: value }));
+    if (field === "legalName" || field === "document") {
+      setDuplicateWarning(null);
+      setDuplicateConfirmed(false);
+    }
   }
 
   function validate(): boolean {
@@ -84,11 +98,30 @@ export function ClientFormModal({ isOpen, client, onClose, onSubmit }: ClientFor
   function handleClose() {
     setValues(initialValues);
     setErrors({});
+    setDuplicateWarning(null);
+    setDuplicateConfirmed(false);
     onClose();
   }
 
   async function handleSubmit() {
     if (!validate()) return;
+
+    const duplicate = findDuplicateClient(clients, values, client?.id);
+    if (duplicate.byDocument) {
+      setErrors((prev) => ({
+        ...prev,
+        document: `Este CPF/CNPJ já está cadastrado para "${duplicate.byDocument!.name}".`
+      }));
+      return;
+    }
+    if (duplicate.byName && !duplicateConfirmed) {
+      setDuplicateWarning(
+        `Já existe um cliente cadastrado com o nome "${duplicate.byName.name}". Clique em Salvar novamente para confirmar mesmo assim.`
+      );
+      setDuplicateConfirmed(true);
+      return;
+    }
+
     setIsSaving(true);
     try {
       await onSubmit(values);
@@ -230,6 +263,12 @@ export function ClientFormModal({ isOpen, client, onClose, onSubmit }: ClientFor
           />
         </FormField>
       </div>
+
+      {duplicateWarning && (
+        <div className="mx-4 mb-4 rounded-md border border-amber-300 bg-amber-50 px-3 py-2 text-sm text-amber-800 sm:mx-5">
+          {duplicateWarning}
+        </div>
+      )}
 
       <div className="flex flex-col-reverse gap-2 border-t border-slate-200 px-4 py-3 sm:flex-row sm:justify-end sm:px-5 sm:py-4">
         <Button variant="secondary" onClick={handleClose} disabled={isSaving}>

@@ -16,3 +16,7 @@ export function isValidMoney(value: string) {
     value.trim()
   );
 }
+
+export function normalizeDocument(value: string) {
+  return value.replace(/\D/g, "");
+}

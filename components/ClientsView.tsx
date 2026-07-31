@@ -230,6 +230,7 @@ export function ClientsView() {
 
       <ClientFormModal
         key={`client-form-${isClientModalOpen ? "open" : "closed"}`}
+        clients={clients}
         isOpen={isClientModalOpen}
         onClose={() => setIsClientModalOpen(false)}
         onSubmit={createClient}

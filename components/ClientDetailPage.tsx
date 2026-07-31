@@ -235,6 +235,7 @@ export function ClientDetailPage({ clientId }: ClientDetailPageProps) {
       <ClientFormModal
         key={`edit-client-${client.id}-${String(isEditModalOpen)}`}
         client={client}
+        clients={clients}
         isOpen={isEditModalOpen}
         onClose={() => setIsEditModalOpen(false)}
         onSubmit={(values) => updateClient(client.id, values)}

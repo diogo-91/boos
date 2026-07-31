@@ -1,5 +1,6 @@
 import type { Client, LegalProcess } from "@/lib/types";
 import { CLIENT_STATUS_MAP, normalizeText } from "@/lib/domain";
+import { normalizeDocument } from "@/lib/validation";
 
 export type ClientFilterState = {
   search: string;
@@ -73,6 +74,24 @@ export function filterClients(
     if (client.processIds.length === 0 && filters.billingModel !== "Todos") return false;
     return true;
   });
+}
+
+export function findDuplicateClient(
+  clients: Client[],
+  values: { legalName: string; document: string },
+  excludeId?: string
+): { byDocument?: Client; byName?: Client } {
+  const document = normalizeDocument(values.document);
+  const name = normalizeText(values.legalName);
+
+  const others = clients.filter((client) => client.id !== excludeId);
+
+  const byDocument = document
+    ? others.find((client) => normalizeDocument(client.document) === document)
+    : undefined;
+  const byName = others.find((client) => normalizeText(client.legalName) === name);
+
+  return { byDocument, byName };
 }
 
 export function uniqueBillingModels(processes: LegalProcess[]) {
