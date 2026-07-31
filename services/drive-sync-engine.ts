@@ -82,6 +82,16 @@ async function getClienteByDriveFolderId(folderId: string) {
   return data ?? null;
 }
 
+async function findClienteByNome(nome: string) {
+  const { data } = await getSupabaseClient()
+    .from("clientes")
+    .select("id,drive_folder_id")
+    .eq("nome", nome)
+    .limit(1)
+    .maybeSingle();
+  return data ?? null;
+}
+
 async function criarClienteAutomatico(
   folderId: string,
   folderName: string,
@@ -234,8 +244,24 @@ export async function runDriveSync(): Promise<SyncResult> {
 
           const exists = await clienteExistsByDriveFolderId(file.id);
           if (!exists) {
-            await criarClienteAutomatico(file.id, file.name!, status, statusFolderName);
-            result.clientesCreated++;
+            const nome = folderNameToDisplayName(file.name!);
+            const existingByName = await findClienteByNome(nome);
+            if (existingByName) {
+              // Pasta recriada/duplicada no Drive para um cliente que já existe no
+              // sistema — vincula em vez de criar um cadastro duplicado.
+              if (!existingByName.drive_folder_id) {
+                await getSupabaseClient()
+                  .from("clientes")
+                  .update({
+                    drive_folder_id: file.id,
+                    drive_path: `${statusFolderName} › ${file.name}`
+                  })
+                  .eq("id", existingByName.id);
+              }
+            } else {
+              await criarClienteAutomatico(file.id, file.name!, status, statusFolderName);
+              result.clientesCreated++;
+            }
           } else {
             await atualizarStatusClientePorPasta(file.id, status, statusFolderName, file.name!);
             result.statusUpdated++;

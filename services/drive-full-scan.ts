@@ -42,6 +42,16 @@ async function findClienteByFolderId(folderId: string) {
   return data ?? null;
 }
 
+async function findClienteByNome(nome: string) {
+  const { data } = await getSupabaseClient()
+    .from("clientes")
+    .select("id,nome,drive_path,drive_folder_id")
+    .eq("nome", nome)
+    .limit(1)
+    .maybeSingle();
+  return data ?? null;
+}
+
 async function findProcessoByFolderId(folderId: string) {
   const { data } = await getSupabaseClient()
     .from("processos")
@@ -64,6 +74,25 @@ async function ensureCliente(
 
   const nome = folderNameToDisplayName(folderName);
   const drive_path = `${statusFolderName} › ${folderName}`;
+
+  const existingByName = await findClienteByNome(nome);
+  if (existingByName) {
+    // Pasta recriada/duplicada no Drive para um cliente que já existe no
+    // sistema — vincula em vez de criar um cadastro duplicado.
+    if (!existingByName.drive_folder_id) {
+      await getSupabaseClient()
+        .from("clientes")
+        .update({ drive_folder_id: folderId, drive_path })
+        .eq("id", existingByName.id);
+    }
+    return {
+      id: existingByName.id,
+      nome: existingByName.nome,
+      drive_path: existingByName.drive_path ?? drive_path,
+      created: false
+    };
+  }
+
   const id = crypto.randomUUID();
 
   const { error } = await getSupabaseClient().from("clientes").insert({
