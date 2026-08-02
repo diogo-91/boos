@@ -27,7 +27,7 @@ export async function getSupabaseServerClient() {
           // Chamado a partir de um Server Component sem permissão de escrita.
           // O middleware já cuida de renovar a sessão nesses casos.
         }
-      },
-    },
+      }
+    }
   });
 }

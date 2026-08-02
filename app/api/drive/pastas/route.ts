@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getGoogleDriveClient, isGoogleDriveConfigured } from "@/lib/google/drive";
+import { FOLDER_MIME } from "@/lib/drive-status-map";
 
 export const runtime = "nodejs";
 
@@ -26,7 +27,7 @@ export async function POST(request: Request) {
     const { data } = await drive.files.create({
       requestBody: {
         name,
-        mimeType: "application/vnd.google-apps.folder",
+        mimeType: FOLDER_MIME,
         parents: [parentId]
       },
       fields: "id,name,mimeType,modifiedTime"

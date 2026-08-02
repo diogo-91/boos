@@ -2,13 +2,14 @@ import type { ClientStatus } from "@/lib/types";
 import { getGoogleDriveClient, getGoogleDriveRootFolderId } from "@/lib/google/drive";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { readDriveFile } from "@/services/ai-document-reader";
+import { FOLDER_MIME, STATUS_FOLDER_MAP, matchStatusFolderKey } from "@/lib/drive-status-map";
 import {
-  FOLDER_MIME,
-  STATUS_FOLDER_MAP,
-  STATUS_DB_MAP,
-  folderNameToDisplayName,
-  parseProcessFolderName
-} from "@/lib/drive-status-map";
+  createProcessoFromFolder,
+  findClienteByDriveFolderId,
+  findProcessoByDriveFolderId,
+  linkOrCreateClienteFromFolder,
+  updateClienteStatusFromFolder
+} from "@/services/drive-status-sync";
 
 async function getSyncToken(): Promise<string | null> {
   const { data } = await getSupabaseClient()
@@ -41,11 +42,8 @@ async function getStatusFolderIds(): Promise<Record<string, ClientStatus>> {
   const result: Record<string, ClientStatus> = {};
   for (const file of data.files ?? []) {
     if (!file.id || !file.name) continue;
-    const normalized = file.name.toLowerCase().replace(/\s+/g, "");
-    const matched = Object.entries(STATUS_FOLDER_MAP).find(
-      ([key]) => key.toLowerCase().replace(/\s+/g, "") === normalized
-    );
-    if (matched) result[file.id] = matched[1];
+    const key = matchStatusFolderKey(file.name);
+    if (key) result[file.id] = STATUS_FOLDER_MAP[key];
   }
   return result;
 }
@@ -55,112 +53,11 @@ async function getFileParentId(fileId: string): Promise<string | null> {
   return data.parents?.[0] ?? null;
 }
 
-async function clienteExistsByDriveFolderId(folderId: string): Promise<boolean> {
-  const { data } = await getSupabaseClient()
-    .from("clientes")
-    .select("id")
-    .eq("drive_folder_id", folderId)
-    .maybeSingle();
-  return Boolean(data);
-}
-
-async function processoExistsByDriveFolderId(folderId: string): Promise<boolean> {
-  const { data } = await getSupabaseClient()
-    .from("processos")
-    .select("id")
-    .eq("drive_folder_id", folderId)
-    .maybeSingle();
-  return Boolean(data);
-}
-
-async function getClienteByDriveFolderId(folderId: string) {
-  const { data } = await getSupabaseClient()
-    .from("clientes")
-    .select("id,nome,drive_path")
-    .eq("drive_folder_id", folderId)
-    .maybeSingle();
-  return data ?? null;
-}
-
-async function findClienteByNome(nome: string) {
-  const { data } = await getSupabaseClient()
-    .from("clientes")
-    .select("id,drive_folder_id")
-    .eq("nome", nome)
-    .limit(1)
-    .maybeSingle();
-  return data ?? null;
-}
-
-async function criarClienteAutomatico(
-  folderId: string,
-  folderName: string,
-  status: ClientStatus,
-  statusFolderName: string
-) {
-  const { error } = await getSupabaseClient().from("clientes").insert({
-    id: crypto.randomUUID(),
-    nome: folderNameToDisplayName(folderName),
-    tipo: "PF",
-    status: STATUS_DB_MAP[status],
-    cpf_cnpj: "",
-    rg_ie: "",
-    data_cadastro: new Date().toISOString().slice(0, 10),
-    data_ativacao: status === "Ativo" ? new Date().toISOString().slice(0, 10) : null,
-    data_finalizacao:
-      status === "Arquivado" || status === "Cancelado"
-        ? new Date().toISOString().slice(0, 10)
-        : null,
-    drive_folder_id: folderId,
-    drive_path: `${statusFolderName} › ${folderName}`
-  });
-
-  if (error) throw error;
-}
-
-async function criarProcessoAutomatico(
-  folderId: string,
-  folderName: string,
-  clienteFolderId: string
-) {
-  const cliente = await getClienteByDriveFolderId(clienteFolderId);
+async function criarProcessoAutomatico(folderId: string, folderName: string, clienteFolderId: string) {
+  const cliente = await findClienteByDriveFolderId(clienteFolderId);
   if (!cliente) return;
 
-  const { number, actionType } = parseProcessFolderName(folderName);
-
-  const { error } = await getSupabaseClient().from("processos").insert({
-    id: crypto.randomUUID(),
-    cliente_id: cliente.id,
-    numero_cnj: number,
-    tipo_acao: actionType || null,
-    status: "em_andamento",
-    drive_folder_id: folderId,
-    drive_path: `${cliente.drive_path ?? cliente.nome} › ${folderName}`
-  });
-
-  if (error) throw error;
-}
-
-async function atualizarStatusClientePorPasta(
-  folderId: string,
-  novoStatus: ClientStatus,
-  statusFolderName: string,
-  folderName: string
-) {
-  const { error } = await getSupabaseClient()
-    .from("clientes")
-    .update({
-      status: STATUS_DB_MAP[novoStatus],
-      drive_path: `${statusFolderName} › ${folderName}`,
-      data_ativacao: novoStatus === "Ativo" ? new Date().toISOString().slice(0, 10) : undefined,
-      data_finalizacao:
-        novoStatus === "Arquivado" || novoStatus === "Cancelado"
-          ? new Date().toISOString().slice(0, 10)
-          : undefined
-    })
-    .eq("drive_folder_id", folderId);
-
-  if (error) throw error;
+  await createProcessoFromFolder(folderId, folderName, cliente.id, cliente.drive_path || cliente.nome);
 }
 
 export type SyncResult = {
@@ -195,8 +92,7 @@ export async function runDriveSync(): Promise<SyncResult> {
   let nextPageToken: string | null | undefined = pageToken;
 
   while (nextPageToken) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const changesPage: any = await getGoogleDriveClient().changes.list({
+    const changesPage = await getGoogleDriveClient().changes.list({
       pageToken: nextPageToken,
       fields: "nextPageToken,newStartPageToken,changes(fileId,removed,file(id,name,mimeType,parents,trashed))",
       includeItemsFromAllDrives: false,
@@ -242,36 +138,25 @@ export async function runDriveSync(): Promise<SyncResult> {
           const statusFolderName =
             Object.entries(STATUS_FOLDER_MAP).find(([, v]) => v === status)?.[0] ?? "";
 
-          const exists = await clienteExistsByDriveFolderId(file.id);
-          if (!exists) {
-            const nome = folderNameToDisplayName(file.name!);
-            const existingByName = await findClienteByNome(nome);
-            if (existingByName) {
-              // Pasta recriada/duplicada no Drive para um cliente que já existe no
-              // sistema — vincula em vez de criar um cadastro duplicado.
-              if (!existingByName.drive_folder_id) {
-                await getSupabaseClient()
-                  .from("clientes")
-                  .update({
-                    drive_folder_id: file.id,
-                    drive_path: `${statusFolderName} › ${file.name}`
-                  })
-                  .eq("id", existingByName.id);
-              }
-            } else {
-              await criarClienteAutomatico(file.id, file.name!, status, statusFolderName);
-              result.clientesCreated++;
-            }
+          const existing = await findClienteByDriveFolderId(file.id);
+          if (!existing) {
+            const { created } = await linkOrCreateClienteFromFolder(
+              file.id,
+              file.name!,
+              status,
+              statusFolderName
+            );
+            if (created) result.clientesCreated++;
           } else {
-            await atualizarStatusClientePorPasta(file.id, status, statusFolderName, file.name!);
+            await updateClienteStatusFromFolder(file.id, status, statusFolderName, file.name!);
             result.statusUpdated++;
           }
         } else {
           const grandParentId = await getFileParentId(parentId);
           if (!grandParentId || !statusFolderIdSet.has(grandParentId)) continue;
 
-          const exists = await processoExistsByDriveFolderId(file.id);
-          if (!exists) {
+          const existing = await findProcessoByDriveFolderId(file.id);
+          if (!existing) {
             await criarProcessoAutomatico(file.id, file.name!, parentId);
             result.processosCreated++;
           }

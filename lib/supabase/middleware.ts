@@ -22,14 +22,14 @@ export async function getSessionUser(request: NextRequest) {
         cookiesToSet.forEach(({ name, value, options }) =>
           response.cookies.set(name, value, options)
         );
-      },
-    },
+      }
+    }
   });
 
   // getUser() revalida o token junto ao Supabase — não usar getSession() aqui,
   // que só lê o cookie local e pode ser adulterado no cliente.
   const {
-    data: { user },
+    data: { user }
   } = await supabase.auth.getUser();
 
   return { user, response };

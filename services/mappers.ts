@@ -1,5 +1,6 @@
 import type { Client, LegalProcess } from "@/lib/types";
 import { toTitleCase } from "@/lib/domain";
+import { STATUS_DB_MAP } from "@/lib/drive-status-map";
 
 type AnyRecord = Record<string, unknown>;
 
@@ -75,26 +76,13 @@ function mapClientStatusFromDb(value: unknown): Client["status"] {
   }
 }
 
+// "Audiência" é a única exceção ao mapeamento de STATUS_DB_MAP: lá ela cai no
+// slug de "ativo" porque não tem pasta própria no Drive, mas aqui — quando o
+// status é definido diretamente pelo usuário no cadastro — mantém seu próprio
+// valor no banco.
 function mapClientStatusToDb(value: Client["status"]) {
-  switch (value) {
-    case "Ativo":
-      return "ativo";
-    case "Audiência":
-      return "audiencia";
-    case "Arquivado":
-      return "arquivado";
-    case "Cancelado":
-      return "cancelado";
-    case "Dativo":
-      return "dativo";
-    case "Sarandi":
-      return "sarandi";
-    case "Parceiros":
-      return "parceiros";
-    case "Contratação":
-    default:
-      return "contratacao";
-  }
+  if (value === "Audiência") return "audiencia";
+  return STATUS_DB_MAP[value];
 }
 
 function mapProcessStatusFromDb(value: unknown): LegalProcess["status"] {

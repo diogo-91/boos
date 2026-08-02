@@ -28,6 +28,17 @@ export const STATUS_FOLDER_TO_DB_MAP: Record<string, string> = Object.fromEntrie
   Object.entries(STATUS_FOLDER_MAP).map(([folder, status]) => [folder, STATUS_DB_MAP[status]])
 );
 
+function normalizeFolderKey(value: string) {
+  return value.toLowerCase().replace(/\s+/g, "");
+}
+
+// Casa o nome de uma pasta do Drive com a chave correspondente em
+// STATUS_FOLDER_MAP, ignorando maiúsculas/minúsculas e espaços.
+export function matchStatusFolderKey(folderName: string): string | undefined {
+  const normalized = normalizeFolderKey(folderName);
+  return Object.keys(STATUS_FOLDER_MAP).find((key) => normalizeFolderKey(key) === normalized);
+}
+
 export function folderNameToDisplayName(folderName: string): string {
   return folderName.replace(/_/g, " ").replace(/\b\w/g, (c) => c.toUpperCase()).trim();
 }

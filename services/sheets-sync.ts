@@ -11,6 +11,17 @@ type SheetRow = {
   indicacao: string;
 };
 
+// Posição das colunas usadas na planilha de honorários (cabeçalho na linha 1,
+// ignorado). As colunas 2, 5 e 6 existem na planilha mas não alimentam
+// nenhum campo deste sync.
+const SHEET_COLUMN = {
+  cliente: 0,
+  cnj: 1,
+  honorariosNathalia: 3,
+  honorariosTerceiro: 4,
+  indicacao: 7
+} as const;
+
 function parsePct(raw: string): number | null {
   const cleaned = raw.trim().replace("%", "");
   const n = parseFloat(cleaned);
@@ -53,7 +64,11 @@ export async function readSheetRows(): Promise<SheetRow[]> {
     }
     cols.push(current.trim());
 
-    const [cliente, cnj, , honNath, honTer, , , indicacao] = cols;
+    const cliente = cols[SHEET_COLUMN.cliente];
+    const cnj = cols[SHEET_COLUMN.cnj];
+    const honNath = cols[SHEET_COLUMN.honorariosNathalia];
+    const honTer = cols[SHEET_COLUMN.honorariosTerceiro];
+    const indicacao = cols[SHEET_COLUMN.indicacao];
     if (!cliente?.trim() || !cnj?.trim()) continue;
 
     rows.push({

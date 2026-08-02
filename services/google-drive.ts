@@ -3,8 +3,7 @@ import {
   getGoogleDriveClient,
   getGoogleDriveRootFolderId
 } from "@/lib/google/drive";
-
-const FOLDER_MIME_TYPE = "application/vnd.google-apps.folder";
+import { FOLDER_MIME } from "@/lib/drive-status-map";
 
 const STATUS_FOLDER_NAMES: Record<string, string> = {
   arquivado: "01_arquivados",
@@ -63,7 +62,7 @@ async function getFolderParents(folderId: string) {
 async function createFolder(name: string, parentId: string) {
   const drive = getGoogleDriveClient();
   const { data } = await drive.files.create({
-    requestBody: { name, mimeType: FOLDER_MIME_TYPE, parents: [parentId] },
+    requestBody: { name, mimeType: FOLDER_MIME, parents: [parentId] },
     fields: "id,name"
   });
 
@@ -82,7 +81,7 @@ export async function findOrCreateFolder(name: string, parentId: string) {
   const { data } = await drive.files.list({
     q: [
       `name = '${safeName}'`,
-      `mimeType = '${FOLDER_MIME_TYPE}'`,
+      `mimeType = '${FOLDER_MIME}'`,
       `'${safeParentId}' in parents`,
       "trashed = false"
     ].join(" and "),

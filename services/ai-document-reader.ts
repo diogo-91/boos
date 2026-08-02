@@ -2,7 +2,12 @@ import Anthropic from "@anthropic-ai/sdk";
 import mammoth from "mammoth";
 import { getGoogleDriveClient, getGoogleDriveRootFolderId } from "@/lib/google/drive";
 import { getSupabaseClient } from "@/lib/supabase/client";
-import { STATUS_FOLDER_TO_DB_MAP, folderNameToDisplayName } from "@/lib/drive-status-map";
+import {
+  FOLDER_MIME,
+  STATUS_FOLDER_TO_DB_MAP,
+  folderNameToDisplayName,
+  matchStatusFolderKey
+} from "@/lib/drive-status-map";
 import { normalizeDocument } from "@/lib/validation";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -256,12 +261,20 @@ Retorne SOMENTE o JSON, sem texto adicional.`
   if (!isImage && !isPdf && !isText) return {};
 
   // Para texto puro (extraído de .docx via mammoth), manda como texto direto
-  const content = isText
-    ? [{ type: "text" as const, text: `Arquivo: ${fileName}\n\nConteúdo do documento:\n${Buffer.from(base64Content, "base64").toString("utf-8")}\n\n${prompts[documentType]}` }]
+  const content: Array<Anthropic.Messages.ContentBlockParam> = isText
+    ? [{ type: "text", text: `Arquivo: ${fileName}\n\nConteúdo do documento:\n${Buffer.from(base64Content, "base64").toString("utf-8")}\n\n${prompts[documentType]}` }]
     : [
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        { type: "document", source: { type: "base64", media_type: isImage ? (mimeType as "image/jpeg" | "image/png" | "image/gif" | "image/webp") : "application/pdf", data: base64Content } } as any,
-        { type: "text" as const, text: `Arquivo: ${fileName}\n\n${prompts[documentType]}` }
+        isImage
+          ? {
+              type: "image",
+              source: {
+                type: "base64",
+                media_type: mimeType as Anthropic.Messages.Base64ImageSource["media_type"],
+                data: base64Content
+              }
+            }
+          : { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64Content } },
+        { type: "text", text: `Arquivo: ${fileName}\n\n${prompts[documentType]}` }
       ];
 
   const message = await anthropic.messages.create({
@@ -453,7 +466,7 @@ async function markFileProcessed(fileId: string, modifiedTime: string | null): P
 async function getStatusFolderMap(): Promise<Record<string, string>> {
   const drive = getGoogleDriveClient();
   const { data } = await drive.files.list({
-    q: `'${getGoogleDriveRootFolderId()}' in parents and mimeType = 'application/vnd.google-apps.folder' and trashed = false`,
+    q: `'${getGoogleDriveRootFolderId()}' in parents and mimeType = '${FOLDER_MIME}' and trashed = false`,
     fields: "files(id,name)",
     pageSize: 30
   });
@@ -461,11 +474,8 @@ async function getStatusFolderMap(): Promise<Record<string, string>> {
   const map: Record<string, string> = {};
   for (const f of data.files ?? []) {
     if (!f.id || !f.name) continue;
-    const normalized = f.name.toLowerCase().replace(/\s+/g, "");
-    const matched = Object.entries(STATUS_FOLDER_TO_DB_MAP).find(
-      ([key]) => key.toLowerCase().replace(/\s+/g, "") === normalized
-    );
-    if (matched) map[f.id] = matched[1];
+    const key = matchStatusFolderKey(f.name);
+    if (key) map[f.id] = STATUS_FOLDER_TO_DB_MAP[key];
   }
   return map;
 }
