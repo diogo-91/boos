@@ -390,8 +390,8 @@ Durante o processamento aparece uma linha do tempo com seis etapas:
 | Localizando cliente/processo | Achando o cadastro correspondente |
 | Salvando dados extraídos | Gravando no banco |
 
-Cada etapa mostra ✓ concluída, — pulada ou ✕ com erro. Ao final, uma mensagem
-informa quais campos foram preenchidos.
+Cada etapa fica marcada como concluída, pulada ou com erro. Ao final, uma
+mensagem informa quais campos foram preenchidos.
 
 ### O que a IA reconhece
 

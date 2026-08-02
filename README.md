@@ -14,6 +14,17 @@ Drive, uma rotina periódica traz a mudança de volta para o banco.
 | [Manual operacional](docs/manual-operacional.md) | uso diário | Cada tela e cada ação, ponto a ponto |
 | [Documentação técnica](docs/documentacao-tecnica.md) | desenvolvimento | Arquitetura, modelo de dados, API, integrações, deploy |
 
+### Versão em PDF
+
+Em `docs/pdf/`, para impressão ou envio: `Documentacao-Completa.pdf` (os dois
+documentos), `Manual-Operacional.pdf` e `Documentacao-Tecnica.pdf`.
+
+Os markdown são a fonte da verdade — depois de editá-los, regere os PDFs:
+
+```bash
+pip install reportlab && python docs/gerar-pdf.py .
+```
+
 ## Stack
 
 - **Next.js 16** (App Router) + **React 19** + **TypeScript** em modo estrito
