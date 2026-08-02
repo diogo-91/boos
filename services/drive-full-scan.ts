@@ -50,12 +50,14 @@ async function getCheckpoint(): Promise<ScanCheckpoint> {
 }
 
 async function saveCheckpoint(statusFolderId: string | null, clienteFolderId: string | null) {
-  await getSupabaseClient().from("drive_scan_checkpoint").upsert({
+  const { error } = await getSupabaseClient().from("drive_scan_checkpoint").upsert({
     id: "singleton",
     status_folder_id: statusFolderId,
     cliente_folder_id: clienteFolderId,
     updated_at: new Date().toISOString()
   });
+
+  if (error) throw error;
 }
 
 async function clearCheckpoint() {
@@ -244,7 +246,14 @@ export async function runFullScan(): Promise<FullScanResult> {
       }
 
       if (Date.now() - startedAt > MAX_DURATION_MS) {
-        await saveCheckpoint(statusFolder.id, clienteItem.id);
+        // Falha em salvar o checkpoint não pode derrubar a resposta com as
+        // estatisticas ja acumuladas — só significa que a proxima execução
+        // vai reiniciar do começo em vez de retomar daqui.
+        try {
+          await saveCheckpoint(statusFolder.id, clienteItem.id);
+        } catch (err) {
+          result.errors.push(`[checkpoint] Falha ao salvar ponto de retomada: ${err instanceof Error ? err.message : String(err)}`);
+        }
         result.timedOut = true;
         break statusLoop;
       }
@@ -252,7 +261,11 @@ export async function runFullScan(): Promise<FullScanResult> {
   }
 
   if (!result.timedOut) {
-    await clearCheckpoint();
+    try {
+      await clearCheckpoint();
+    } catch (err) {
+      result.errors.push(`[checkpoint] Falha ao limpar ponto de retomada: ${err instanceof Error ? err.message : String(err)}`);
+    }
   }
 
   return result;

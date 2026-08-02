@@ -458,9 +458,11 @@ async function getProcessedFileModifiedTime(fileId: string): Promise<string | nu
 }
 
 async function markFileProcessed(fileId: string, modifiedTime: string | null): Promise<void> {
-  await getSupabaseClient()
+  const { error } = await getSupabaseClient()
     .from("documentos_processados")
     .upsert({ file_id: fileId, modified_time: modifiedTime, processed_at: new Date().toISOString() });
+
+  if (error) throw error;
 }
 
 async function getStatusFolderMap(): Promise<Record<string, string>> {
@@ -569,7 +571,14 @@ export async function readDriveFile(
   emit("ai", "active", "Lendo documento com IA");
   const extracted = await extractWithClaude(fileData.content, fileData.mimeType, docType, fileName);
   emit("ai", "done", `${Object.keys(extracted).length} campo(s) identificado(s)`);
-  await markFileProcessed(fileId, modifiedTime);
+
+  // Não deixa uma falha aqui abortar o salvamento dos dados extraídos abaixo —
+  // a marca de "já lido" é só controle interno, o dado extraído é o que importa.
+  try {
+    await markFileProcessed(fileId, modifiedTime);
+  } catch (err) {
+    console.error("[AIReader] Falha ao marcar arquivo como processado:", err);
+  }
 
   if (result.processId) {
     emit("match", "done", "Processo já vinculado a esta pasta");
