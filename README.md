@@ -11,13 +11,18 @@ Drive, uma rotina periódica traz a mudança de volta para o banco.
 
 | Documento | Para quem | Conteúdo |
 | --- | --- | --- |
+| [Tutorial de uso](docs/tutorial.md) | quem está começando | Um caso do começo ao fim, passo a passo |
 | [Manual operacional](docs/manual-operacional.md) | uso diário | Cada tela e cada ação, ponto a ponto |
 | [Documentação técnica](docs/documentacao-tecnica.md) | desenvolvimento | Arquitetura, modelo de dados, API, integrações, deploy |
 
+Comece pelo tutorial: ele ensina o caminho. O manual serve para tirar dúvida
+pontual depois.
+
 ### Versão em PDF
 
-Em `docs/pdf/`, para impressão ou envio: `Documentacao-Completa.pdf` (os dois
-documentos), `Manual-Operacional.pdf` e `Documentacao-Tecnica.pdf`.
+Em `docs/pdf/`, para impressão ou envio: `Documentacao-Completa.pdf` (os três
+documentos), `Tutorial-de-Uso.pdf`, `Manual-Operacional.pdf` e
+`Documentacao-Tecnica.pdf`.
 
 Os markdown são a fonte da verdade — depois de editá-los, regere os PDFs:
 

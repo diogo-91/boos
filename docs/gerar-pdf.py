@@ -329,8 +329,11 @@ def parse_blocks(md):
             continue
 
         if re.match(r"^\s*\d+\.\s+", line):
+            # preserva o numero inicial: uma lista retomada apos tabela ou
+            # bloco de codigo precisa continuar de onde parou
+            start = int(re.match(r"^\s*(\d+)\.", line).group(1))
             items, i = collect_list(lines, i, r"^\s*\d+\.\s+")
-            blocks.append(("ol", items))
+            blocks.append(("ol", (start, items)))
             continue
 
         # paragrafo
@@ -584,7 +587,8 @@ def blocks_to_flowables(blocks, level_offset=0, skip_titles=(), avail_w=CONTENT_
                 )
             out.append(Spacer(1, 5))
         elif kind == "ol":
-            for idx, it in enumerate(payload, 1):
+            start, items = payload
+            for idx, it in enumerate(items, start):
                 out.append(Paragraph(inline(it), STYLES["li"], bulletText=f"{idx}."))
             out.append(Spacer(1, 5))
         elif kind == "hr":
@@ -758,12 +762,20 @@ def main():
             "Documentacao-Completa.pdf",
             "Base Operacional",
             "Documenta\u00e7\u00e3o completa do sistema",
-            common + [("Conte\u00fado", "Manual operacional e documenta\u00e7\u00e3o t\u00e9cnica")],
+            common + [("Conte\u00fado", "Tutorial, manual operacional e documenta\u00e7\u00e3o t\u00e9cnica")],
             [
                 ("README.md", "Vis\u00e3o geral", 1),
+                ("docs/tutorial.md", "Tutorial de uso", 1),
                 ("docs/manual-operacional.md", "Manual operacional", 1),
                 ("docs/documentacao-tecnica.md", "Documenta\u00e7\u00e3o t\u00e9cnica", 1),
             ],
+        ),
+        (
+            "Tutorial-de-Uso.pdf",
+            "Tutorial de uso",
+            "Base Operacional \u2014 do primeiro acesso ao processo arquivado",
+            common + [("P\u00fablico", "Quem est\u00e1 come\u00e7ando a usar")],
+            [("docs/tutorial.md", None, 0)],
         ),
         (
             "Manual-Operacional.pdf",
