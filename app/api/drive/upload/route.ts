@@ -22,9 +22,16 @@ export async function POST(request: Request) {
     );
   }
 
-  const formData = await request.formData();
-  const file = formData.get("file") as File | null;
-  const parentId = formData.get("parentId") as string | null;
+  let file: File | null;
+  let parentId: string | null;
+
+  try {
+    const formData = await request.formData();
+    file = formData.get("file") as File | null;
+    parentId = formData.get("parentId") as string | null;
+  } catch {
+    return NextResponse.json({ message: "Corpo da requisição inválido." }, { status: 400 });
+  }
 
   if (!file || !parentId) {
     return NextResponse.json(

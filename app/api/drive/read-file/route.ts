@@ -4,8 +4,16 @@ import { readDriveFile } from "@/services/ai-document-reader";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const body = await request.json() as { fileId?: string; fileName?: string; parentFolderId?: string };
-  const { fileId, fileName, parentFolderId } = body;
+  let fileId: string | undefined;
+  let fileName: string | undefined;
+  let parentFolderId: string | undefined;
+
+  try {
+    const body = await request.json() as { fileId?: string; fileName?: string; parentFolderId?: string };
+    ({ fileId, fileName, parentFolderId } = body);
+  } catch {
+    return NextResponse.json({ error: "Corpo da requisição inválido." }, { status: 400 });
+  }
 
   if (!fileId || !fileName || !parentFolderId) {
     return NextResponse.json(

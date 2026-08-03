@@ -148,6 +148,13 @@ function parsePercentToNumber(value: string) {
   return Number.isFinite(number) ? number : null;
 }
 
+function parseMoneyToNumber(value: string) {
+  if (!value) return null;
+  const cleaned = value.replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
+  const number = Number(cleaned);
+  return Number.isFinite(number) ? number : null;
+}
+
 export function mapClienteFromDb(row: AnyRecord): Client {
   return {
     id: asString(row.id),
@@ -174,7 +181,10 @@ export function mapClienteFromDb(row: AnyRecord): Client {
         ? "—"
         : `${String(row.percentual_parceiro)}%`,
     driveFolderId: asOptionalString(row.drive_folder_id),
-    driveFolder: asString(row.drive_path ?? row.drive_folder_id, ""),
+    // Sem drive_path (pasta criada antes de existir esse campo, por exemplo),
+    // cai pro placeholder "—" do componente em vez de mostrar o ID
+    // alfanumérico opaco do Drive como se fosse um caminho legível.
+    driveFolder: asString(row.drive_path, ""),
     processIds: []
   };
 }
@@ -249,15 +259,7 @@ export function mapProcessoToDb(process: LegalProcess, includeId = true) {
     data_protocolo: asDbDate(process.filingDate),
     data_encerramento: asDbDate(process.closingDate),
     modelo_cobranca: process.billingModel || null,
-    valor_entrada: process.entryValue
-      ? Number(
-          process.entryValue
-            .replace("R$", "")
-            .replace(/\./g, "")
-            .replace(",", ".")
-            .trim()
-        )
-      : null,
+    valor_entrada: parseMoneyToNumber(process.entryValue),
     percentual_exito: parsePercentToNumber(process.successFee),
     localizacao: process.location || null,
     anotacoes: process.notes || null,

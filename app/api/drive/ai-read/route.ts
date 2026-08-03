@@ -9,17 +9,17 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const body = await request.json() as { fileId?: string; fileName?: string; parentFolderId?: string };
-  const { fileId, fileName, parentFolderId } = body;
-
-  if (!fileId || !fileName || !parentFolderId) {
-    return NextResponse.json(
-      { error: "fileId, fileName e parentFolderId são obrigatórios" },
-      { status: 400 }
-    );
-  }
-
   try {
+    const body = await request.json() as { fileId?: string; fileName?: string; parentFolderId?: string };
+    const { fileId, fileName, parentFolderId } = body;
+
+    if (!fileId || !fileName || !parentFolderId) {
+      return NextResponse.json(
+        { error: "fileId, fileName e parentFolderId são obrigatórios" },
+        { status: 400 }
+      );
+    }
+
     const result = await readDriveFile(fileId, fileName, parentFolderId);
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import type { Client } from "@/lib/types";
 import { isGoogleDriveConfigured } from "@/lib/google/drive";
-import { atualizarDriveCliente } from "@/services/clientes";
+import { atualizarDriveCliente, buscarClientePorId } from "@/services/clientes";
 import { criarPastaCliente } from "@/services/google-drive";
 
 export const runtime = "nodejs";
@@ -23,6 +23,22 @@ export async function POST(request: Request) {
         { message: "Dados mínimos do cliente não informados." },
         { status: 400 }
       );
+    }
+
+    // findOrCreateFolder não tem lock (M3) — a criação automática no cadastro
+    // e o botão manual de "abrir Drive" podem disparar essa rota quase ao
+    // mesmo tempo pro mesmo cliente. Reler o banco bem antes de criar reduz
+    // bastante a janela: se outra requisição concorrente já terminou e
+    // salvou a pasta, reaproveita em vez de criar uma segunda.
+    const freshClient = await buscarClientePorId(cliente.id);
+    if (freshClient?.driveFolderId) {
+      return NextResponse.json({
+        cliente: freshClient,
+        driveFolder: {
+          driveFolderId: freshClient.driveFolderId,
+          drivePath: freshClient.driveFolder
+        }
+      });
     }
 
     const driveFolder = await criarPastaCliente(cliente);

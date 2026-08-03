@@ -286,12 +286,20 @@ Retorne SOMENTE o JSON, sem texto adicional.`
 
   const text = message.content[0].type === "text" ? message.content[0].text : "";
   const jsonMatch = text.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) return {};
+
+  // Resposta truncada (max_tokens), em prosa, ou recusa do modelo — antes
+  // virava {} silenciosamente e o arquivo era marcado como processado pra
+  // sempre, sem nenhum sinal em lugar nenhum. Lançar aqui deixa o chamador
+  // decidir não marcar o arquivo como lido, pra tentar de novo na próxima
+  // varredura.
+  if (!jsonMatch) {
+    throw new Error(`Resposta da IA sem JSON reconhecível: "${text.slice(0, 200)}"`);
+  }
 
   try {
     return JSON.parse(jsonMatch[0]) as Record<string, string>;
-  } catch {
-    return {};
+  } catch (err) {
+    throw new Error(`JSON retornado pela IA é inválido: ${err instanceof Error ? err.message : String(err)}`);
   }
 }
 
@@ -566,6 +574,21 @@ export async function readDriveFile(
     return result;
   }
 
+  // Nunca confia cegamente no parentFolderId que o chamador informa — sem
+  // isso, qualquer usuário autenticado podia mandar um fileId arbitrário
+  // (qualquer arquivo que a service account alcance) junto com o
+  // parentFolderId de um cliente real, e o conteúdo lido pela IA seria
+  // atribuído a esse cliente mesmo o arquivo não sendo dele de verdade.
+  // Busca o parent real no Drive e ignora o valor recebido.
+  const realParentId = await getParentFolderId(fileId);
+  if (!realParentId) {
+    result.skipped = true;
+    result.skipReason = "Não foi possível determinar a pasta do arquivo no Drive";
+    emit("context", "skip", result.skipReason);
+    return result;
+  }
+  parentFolderId = realParentId;
+
   const grandParentId = await getParentFolderId(parentFolderId);
   const statusMap = await getStatusFolderMap();
 
@@ -606,6 +629,17 @@ export async function readDriveFile(
     folderContext = `${realSubfolderName}/${fileName}`;
   }
 
+  // Nem processo nem pasta de cliente reconhecidos — não gasta download nem
+  // chamada de IA (custo real) num arquivo fora da estrutura gerenciada
+  // pelo app. Checar isso só depois da IA rodar, como era antes, permitia
+  // qualquer usuário autenticado forçar leitura por IA de arquivo arbitrário.
+  if (!processRecord && !clientFolderId) {
+    result.skipped = true;
+    result.skipReason = "Não foi possível determinar a pasta do cliente";
+    emit("context", "skip", result.skipReason);
+    return result;
+  }
+
   const docType = detectDocumentType(fileName, folderContext);
   result.documentType = docType;
   emit("context", "done", `Tipo detectado: ${docType}`);
@@ -622,7 +656,18 @@ export async function readDriveFile(
   emit("download", "done");
 
   emit("ai", "active", "Lendo documento com IA");
-  const extracted = await extractWithClaude(fileData.content, fileData.mimeType, docType, fileName);
+  let extracted: Record<string, string>;
+  try {
+    extracted = await extractWithClaude(fileData.content, fileData.mimeType, docType, fileName);
+  } catch (err) {
+    // Não marca como processado — markFileProcessed só roda depois deste
+    // ponto, então uma falha aqui já sai sem marcar nada, e a próxima
+    // varredura tenta ler o arquivo de novo.
+    result.skipped = true;
+    result.skipReason = `Falha ao ler resposta da IA: ${err instanceof Error ? err.message : String(err)}`;
+    emit("ai", "error", result.skipReason);
+    return result;
+  }
   emit("ai", "done", `${Object.keys(extracted).length} campo(s) identificado(s)`);
 
   // Não deixa uma falha aqui abortar o salvamento dos dados extraídos abaixo —
@@ -659,6 +704,9 @@ export async function readDriveFile(
   emit("match", "active", "Localizando cliente no cadastro");
 
   if (!clientFolderId) {
+    // Não deveria acontecer — já validado logo após a determinação de pasta,
+    // antes do download/IA. Guarda defensiva só pro TypeScript estreitar o
+    // tipo com segurança daqui em diante.
     result.skipped = true;
     result.skipReason = "Não foi possível determinar a pasta do cliente";
     emit("match", "skip", result.skipReason);

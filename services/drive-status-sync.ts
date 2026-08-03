@@ -118,10 +118,16 @@ export async function updateClienteStatusFromFolder(
       status: STATUS_DB_MAP[status],
       drive_path: `${statusFolderName} › ${folderName}`,
       data_ativacao: status === "Ativo" ? hojeLocalISO() : undefined,
+      // undefined = "não mexe" pro Supabase — por isso reativar (voltar pra
+      // Ativo) precisa mandar null explicitamente pra limpar uma
+      // data_finalizacao antiga, senão o registro fica ativo com data de
+      // finalização preenchida.
       data_finalizacao:
         status === "Arquivado" || status === "Cancelado"
           ? hojeLocalISO()
-          : undefined
+          : status === "Ativo"
+            ? null
+            : undefined
     })
     .eq("drive_folder_id", folderId);
 

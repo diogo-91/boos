@@ -33,18 +33,29 @@ async function getStartPageToken(): Promise<string> {
 }
 
 async function getStatusFolderIds(): Promise<Record<string, ClientStatus>> {
-  const { data } = await getGoogleDriveClient().files.list({
-    q: `'${getGoogleDriveRootFolderId()}' in parents and mimeType = '${FOLDER_MIME}' and trashed = false`,
-    fields: "files(id,name)",
-    pageSize: 20
-  });
-
   const result: Record<string, ClientStatus> = {};
-  for (const file of data.files ?? []) {
-    if (!file.id || !file.name) continue;
-    const key = matchStatusFolderKey(file.name);
-    if (key) result[file.id] = STATUS_FOLDER_MAP[key];
-  }
+  let pageToken: string | undefined;
+
+  // Sem paginação, mais de 20 subpastas na raiz (pastas de status + qualquer
+  // outra coisa manual) deixava pastas de status fora da primeira página de
+  // fora do sync incremental, em silêncio.
+  do {
+    const { data } = await getGoogleDriveClient().files.list({
+      q: `'${getGoogleDriveRootFolderId()}' in parents and mimeType = '${FOLDER_MIME}' and trashed = false`,
+      fields: "nextPageToken,files(id,name)",
+      pageSize: 100,
+      pageToken
+    });
+
+    for (const file of data.files ?? []) {
+      if (!file.id || !file.name) continue;
+      const key = matchStatusFolderKey(file.name);
+      if (key) result[file.id] = STATUS_FOLDER_MAP[key];
+    }
+
+    pageToken = data.nextPageToken ?? undefined;
+  } while (pageToken);
+
   return result;
 }
 

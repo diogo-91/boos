@@ -12,8 +12,15 @@ export async function POST(request: Request) {
     );
   }
 
-  const body = await request.json() as { name?: string; parentId?: string };
-  const { name, parentId } = body;
+  let name: string | undefined;
+  let parentId: string | undefined;
+
+  try {
+    const body = await request.json() as { name?: string; parentId?: string };
+    ({ name, parentId } = body);
+  } catch {
+    return NextResponse.json({ message: "Corpo da requisição inválido." }, { status: 400 });
+  }
 
   if (!name || !parentId) {
     return NextResponse.json(

@@ -52,7 +52,18 @@ export function makeClient(values: ClientFormValues, existing?: Client): Client 
     birthOrOpeningDate: formatInputDate(values.birthOrOpeningDate),
     maritalStatus: values.maritalStatus,
     registrationDate: existing?.registrationDate ?? formatTodayBR(),
-    activationDate: existing?.activationDate || (values.status === "Ativo" ? formatTodayBR() : "—"),
+    // "—" é o placeholder de "nunca foi ativado" — nem `||` nem `??` cai no
+    // fallback pra ele (é uma string truthy e não-nula), então sem checar
+    // explicitamente o cliente nunca ganhava data de ativação ao editar o
+    // formulário e mudar o status pra "Ativo". Uma vez definida de verdade,
+    // a data é preservada mesmo que o status mude de novo (mesma convenção
+    // de applyClientStatusDates).
+    activationDate:
+      existing?.activationDate && existing.activationDate !== "—"
+        ? existing.activationDate
+        : values.status === "Ativo"
+          ? formatTodayBR()
+          : "—",
     finalizationDate: existing?.finalizationDate ?? "—",
     phone: values.phone,
     email: values.email,

@@ -106,6 +106,14 @@ async function getStatusParentFolder(status: ClientStatus | string) {
   return findOrCreateFolder(folderName, rootFolderId);
 }
 
+async function getAllStatusFolderIds(): Promise<Set<string>> {
+  const rootFolderId = getGoogleDriveRootFolderId();
+  const folders = await Promise.all(
+    Object.values(STATUS_FOLDER_NAMES).map((name) => findOrCreateFolder(name, rootFolderId))
+  );
+  return new Set(folders.map((f) => f.id));
+}
+
 function buildClientFolderName(client: Client) {
   return sanitizeFolderName(client.legalName || client.name);
 }
@@ -186,13 +194,26 @@ export async function moverPastaClientePorStatus(
   }
 
   const drive = getGoogleDriveClient();
-  const parentFolder = await getStatusParentFolder(novoStatus);
-  const previousParents = await getFolderParents(client.driveFolderId);
+  const [parentFolder, currentParents, statusFolderIds] = await Promise.all([
+    getStatusParentFolder(novoStatus),
+    getFolderParents(client.driveFolderId),
+    getAllStatusFolderIds()
+  ]);
+
+  // Remove só os parents atuais que SÃO pasta de status (normalmente um só:
+  // a do status anterior) — nunca todos os parents. Se a pasta do cliente
+  // foi adicionada manualmente a um segundo lugar do Drive fora da
+  // estrutura de status, ela permanece lá em vez de ser removida sem aviso.
+  //
+  // Não dá pra usar client.status pra achar a pasta anterior: por causa da
+  // ordem das chamadas (atualizarCliente roda antes de mover a pasta),
+  // client.status já chega aqui como o status NOVO, não o antigo.
+  const removeParents = currentParents.filter((id) => statusFolderIds.has(id));
 
   await drive.files.update({
     fileId: client.driveFolderId,
     addParents: parentFolder.id,
-    removeParents: previousParents.join(",") || undefined,
+    removeParents: removeParents.length > 0 ? removeParents.join(",") : undefined,
     fields: "id,parents"
   });
 
