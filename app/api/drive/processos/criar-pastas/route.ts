@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { getSupabaseClient } from "@/lib/supabase/client";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { criarPastaProcesso } from "@/services/google-drive";
 import { isValidSyncSecret } from "@/lib/sync-auth";
 import type { Client, LegalProcess } from "@/lib/types";
@@ -12,7 +12,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
   }
 
-  const supabase = getSupabaseClient();
+  const supabase = getSupabaseServiceClient();
 
   // Busca todos os processos sem pasta Drive que têm cliente com pasta Drive
   const { data: processos } = await supabase

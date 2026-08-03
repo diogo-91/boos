@@ -1,5 +1,5 @@
 import type { ClientStatus } from "@/lib/types";
-import { getSupabaseClient } from "@/lib/supabase/client";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { STATUS_DB_MAP, folderNameToDisplayName, parseProcessFolderName } from "@/lib/drive-status-map";
 import { hojeLocalISO } from "@/lib/date-utils";
 
@@ -10,7 +10,7 @@ export async function findClienteByDriveFolderId(folderId: string): Promise<Driv
   // de uma linha com o mesmo drive_folder_id (cadastro duplicado por bug
   // anterior), o erro não é checado, e o cliente passa a parecer "não
   // encontrado" — criando mais uma duplicata a cada varredura, indefinidamente.
-  const { data } = await getSupabaseClient()
+  const { data } = await getSupabaseServiceClient()
     .from("clientes")
     .select("id,nome,drive_path")
     .eq("drive_folder_id", folderId)
@@ -20,7 +20,7 @@ export async function findClienteByDriveFolderId(folderId: string): Promise<Driv
 }
 
 async function findClienteByNome(nome: string) {
-  const { data } = await getSupabaseClient()
+  const { data } = await getSupabaseServiceClient()
     .from("clientes")
     .select("id,nome,drive_path,drive_folder_id")
     .eq("nome", nome);
@@ -64,7 +64,7 @@ async function linkExistingClienteToFolder(
     );
   }
 
-  await getSupabaseClient()
+  await getSupabaseServiceClient()
     .from("clientes")
     .update({ drive_folder_id: folderId, drive_path: drivePath })
     .eq("id", existing.id);
@@ -85,7 +85,7 @@ export async function linkOrCreateClienteFromFolder(
   if (linked) return { cliente: linked, created: false };
 
   const id = crypto.randomUUID();
-  const { error } = await getSupabaseClient().from("clientes").insert({
+  const { error } = await getSupabaseServiceClient().from("clientes").insert({
     id,
     nome,
     tipo: "PF",
@@ -112,7 +112,7 @@ export async function updateClienteStatusFromFolder(
   statusFolderName: string,
   folderName: string
 ) {
-  const { error } = await getSupabaseClient()
+  const { error } = await getSupabaseServiceClient()
     .from("clientes")
     .update({
       status: STATUS_DB_MAP[status],
@@ -135,7 +135,7 @@ export async function updateClienteStatusFromFolder(
 }
 
 export async function findProcessoByDriveFolderId(folderId: string) {
-  const { data } = await getSupabaseClient()
+  const { data } = await getSupabaseServiceClient()
     .from("processos")
     .select("id,cliente_id")
     .eq("drive_folder_id", folderId)
@@ -153,7 +153,7 @@ export async function createProcessoFromFolder(
   const { number, actionType } = parseProcessFolderName(folderName);
   const id = crypto.randomUUID();
 
-  const { error } = await getSupabaseClient().from("processos").insert({
+  const { error } = await getSupabaseServiceClient().from("processos").insert({
     id,
     cliente_id: clienteId,
     numero_cnj: number,

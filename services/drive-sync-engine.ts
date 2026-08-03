@@ -1,6 +1,6 @@
 import type { ClientStatus } from "@/lib/types";
 import { getGoogleDriveClient, getGoogleDriveRootFolderId } from "@/lib/google/drive";
-import { getSupabaseClient } from "@/lib/supabase/client";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { readDriveFile } from "@/services/ai-document-reader";
 import { FOLDER_MIME, STATUS_FOLDER_MAP, matchStatusFolderKey } from "@/lib/drive-status-map";
 import {
@@ -12,7 +12,7 @@ import {
 } from "@/services/drive-status-sync";
 
 async function getSyncToken(): Promise<string | null> {
-  const { data } = await getSupabaseClient()
+  const { data } = await getSupabaseServiceClient()
     .from("drive_sync_tokens")
     .select("page_token")
     .eq("id", "singleton")
@@ -21,7 +21,7 @@ async function getSyncToken(): Promise<string | null> {
 }
 
 async function saveSyncToken(token: string) {
-  await getSupabaseClient()
+  await getSupabaseServiceClient()
     .from("drive_sync_tokens")
     .upsert({ id: "singleton", page_token: token, updated_at: new Date().toISOString() });
 }

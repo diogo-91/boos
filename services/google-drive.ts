@@ -3,7 +3,7 @@ import {
   getGoogleDriveClient,
   getGoogleDriveRootFolderId
 } from "@/lib/google/drive";
-import { getSupabaseClient } from "@/lib/supabase/client";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { FOLDER_MIME } from "@/lib/drive-status-map";
 
 const STATUS_FOLDER_NAMES: Record<string, string> = {
@@ -130,7 +130,7 @@ async function createDefaultClientStructure(clientFolderId: string) {
 }
 
 async function findClienteOwningFolder(folderId: string): Promise<string | null> {
-  const { data } = await getSupabaseClient()
+  const { data } = await getSupabaseServiceClient()
     .from("clientes")
     .select("id")
     .eq("drive_folder_id", folderId)

@@ -1,4 +1,4 @@
-import { getSupabaseClient } from "@/lib/supabase/client";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 const LOCK_ID = "singleton";
 const STALE_AFTER_MS = 10 * 60 * 1000;
@@ -12,7 +12,7 @@ const STALE_AFTER_MS = 10 * 60 * 1000;
 export async function acquireScanLock(): Promise<string | null> {
   const staleBefore = new Date(Date.now() - STALE_AFTER_MS).toISOString();
   const token = new Date().toISOString();
-  const supabase = getSupabaseClient();
+  const supabase = getSupabaseServiceClient();
 
   const { data, error } = await supabase
     .from("drive_scan_lock")
@@ -41,7 +41,7 @@ export async function releaseScanLock(token: string): Promise<void> {
   // Só libera se o lock ainda pertence a quem pediu (locked_at bate com o
   // token recebido na aquisição) — se não bate, alguém já roubou o lock
   // depois que ele ficou stale, e não é papel deste processo derrubá-lo.
-  await getSupabaseClient()
+  await getSupabaseServiceClient()
     .from("drive_scan_lock")
     .update({ locked: false })
     .eq("id", LOCK_ID)

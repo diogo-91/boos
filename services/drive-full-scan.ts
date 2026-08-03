@@ -1,6 +1,6 @@
 import type { ClientStatus } from "@/lib/types";
 import { getGoogleDriveClient, getGoogleDriveRootFolderId } from "@/lib/google/drive";
-import { getSupabaseClient } from "@/lib/supabase/client";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { readDriveFile } from "@/services/ai-document-reader";
 import { FOLDER_MIME, STATUS_FOLDER_MAP, matchStatusFolderKey } from "@/lib/drive-status-map";
 import {
@@ -37,7 +37,7 @@ async function listChildren(parentId: string) {
 type ScanCheckpoint = { statusFolderId: string | null; clienteFolderId: string | null };
 
 async function getCheckpoint(): Promise<ScanCheckpoint> {
-  const { data } = await getSupabaseClient()
+  const { data } = await getSupabaseServiceClient()
     .from("drive_scan_checkpoint")
     .select("status_folder_id,cliente_folder_id")
     .eq("id", "singleton")
@@ -50,7 +50,7 @@ async function getCheckpoint(): Promise<ScanCheckpoint> {
 }
 
 async function saveCheckpoint(statusFolderId: string | null, clienteFolderId: string | null) {
-  const { error } = await getSupabaseClient().from("drive_scan_checkpoint").upsert({
+  const { error } = await getSupabaseServiceClient().from("drive_scan_checkpoint").upsert({
     id: "singleton",
     status_folder_id: statusFolderId,
     cliente_folder_id: clienteFolderId,

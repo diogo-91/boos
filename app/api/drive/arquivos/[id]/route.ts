@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { getGoogleDriveClient, isGoogleDriveConfigured } from "@/lib/google/drive";
-import { getSupabaseClient } from "@/lib/supabase/client";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 export const runtime = "nodejs";
 
@@ -21,7 +21,7 @@ async function isManagedFile(fileId: string): Promise<boolean> {
   const candidateIds = [parentId, grandParentId].filter((v): v is string => Boolean(v));
   if (candidateIds.length === 0) return false;
 
-  const supabase = getSupabaseClient();
+  const supabase = getSupabaseServiceClient();
   const [{ data: clientes }, { data: processos }] = await Promise.all([
     supabase.from("clientes").select("id").in("drive_folder_id", candidateIds).limit(1),
     supabase.from("processos").select("id").in("drive_folder_id", candidateIds).limit(1)

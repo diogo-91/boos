@@ -1,5 +1,5 @@
 import { getGoogleDriveClient } from "@/lib/google/drive";
-import { getSupabaseClient } from "@/lib/supabase/client";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 const SHEET_ID = process.env.GOOGLE_SHEETS_ID ?? "";
 
@@ -122,7 +122,7 @@ export async function runSheetSync(): Promise<SheetSyncResult> {
     erros: []
   };
 
-  const supabase = getSupabaseClient();
+  const supabase = getSupabaseServiceClient();
   const rows = await readSheetRows();
   result.total = rows.length;
 

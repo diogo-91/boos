@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import mammoth from "mammoth";
 import { getGoogleDriveClient, getGoogleDriveRootFolderId } from "@/lib/google/drive";
-import { getSupabaseClient } from "@/lib/supabase/client";
+import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import {
   FOLDER_MIME,
   STATUS_FOLDER_TO_DB_MAP,
@@ -365,7 +365,7 @@ async function updateClientFields(clientId: string, fields: ExtractedClientField
   );
   if (Object.keys(updateData).length === 0) return;
 
-  const { error } = await getSupabaseClient().from("clientes").update(updateData).eq("id", clientId);
+  const { error } = await getSupabaseServiceClient().from("clientes").update(updateData).eq("id", clientId);
   if (error) throw new Error(`Supabase clientes update: ${error.message} (${error.code}) — dados: ${JSON.stringify(updateData)}`);
 }
 
@@ -375,12 +375,12 @@ async function updateProcessFields(processId: string, fields: ExtractedProcessFi
 
   if (Object.keys(updateData).length === 0) return;
 
-  const { error } = await getSupabaseClient().from("processos").update(updateData).eq("id", processId);
+  const { error } = await getSupabaseServiceClient().from("processos").update(updateData).eq("id", processId);
   if (error) throw new Error(`Supabase processos update: ${error.message} (${error.code}) — dados: ${JSON.stringify(updateData)}`);
 }
 
 async function findClientByDriveFolderId(folderId: string) {
-  const { data } = await getSupabaseClient()
+  const { data } = await getSupabaseServiceClient()
     .from("clientes")
     .select("id")
     .eq("drive_folder_id", folderId)
@@ -407,7 +407,7 @@ async function findClientByFolderName(folderId: string): Promise<FolderNameMatch
   // de "contém o primeiro e o último nome" já existiu aqui e vinculou clientes
   // errados a pastas de outras pessoas — com nomes curtos ou comuns, o
   // trecho bate em qualquer um. Não vale o risco.
-  const { data: found } = await getSupabaseClient()
+  const { data: found } = await getSupabaseServiceClient()
     .from("clientes")
     .select("id,drive_folder_id")
     .ilike("nome", displayName);
@@ -433,7 +433,7 @@ async function findClientByFolderName(folderId: string): Promise<FolderNameMatch
   }
 
   if (match?.id) {
-    await getSupabaseClient()
+    await getSupabaseServiceClient()
       .from("clientes")
       .update({ drive_folder_id: folderId })
       .eq("id", match.id);
@@ -446,7 +446,7 @@ async function findClientByCpfCnpj(
   cpfCnpj: string | undefined
 ): Promise<{ id: string; driveFolderId: string | null } | null> {
   if (!cpfCnpj) return null;
-  const { data } = await getSupabaseClient()
+  const { data } = await getSupabaseServiceClient()
     .from("clientes")
     .select("id,drive_folder_id")
     .eq("cpf_cnpj", cpfCnpj)
@@ -456,7 +456,7 @@ async function findClientByCpfCnpj(
 }
 
 async function findProcessByDriveFolderId(folderId: string) {
-  const { data } = await getSupabaseClient()
+  const { data } = await getSupabaseServiceClient()
     .from("processos")
     .select("id,cliente_id")
     .eq("drive_folder_id", folderId)
@@ -478,7 +478,7 @@ async function getFileModifiedTime(fileId: string): Promise<string | null> {
 }
 
 async function getProcessedFileModifiedTime(fileId: string): Promise<string | null> {
-  const { data } = await getSupabaseClient()
+  const { data } = await getSupabaseServiceClient()
     .from("documentos_processados")
     .select("modified_time")
     .eq("file_id", fileId)
@@ -487,7 +487,7 @@ async function getProcessedFileModifiedTime(fileId: string): Promise<string | nu
 }
 
 async function markFileProcessed(fileId: string, modifiedTime: string | null): Promise<void> {
-  const { error } = await getSupabaseClient()
+  const { error } = await getSupabaseServiceClient()
     .from("documentos_processados")
     .upsert({ file_id: fileId, modified_time: modifiedTime, processed_at: new Date().toISOString() });
 
@@ -503,7 +503,7 @@ async function markFileProcessed(fileId: string, modifiedTime: string | null): P
 // Drive mudasse, o que normalmente não acontece. Essas chamadas desfazem a
 // marca nesses casos específicos, pra a próxima varredura tentar de novo.
 async function unmarkFileProcessed(fileId: string): Promise<void> {
-  const { error } = await getSupabaseClient()
+  const { error } = await getSupabaseServiceClient()
     .from("documentos_processados")
     .delete()
     .eq("file_id", fileId);
@@ -766,7 +766,7 @@ export async function readDriveFile(
     });
 
     const newId = crypto.randomUUID();
-    const { error } = await getSupabaseClient().from("clientes").insert({
+    const { error } = await getSupabaseServiceClient().from("clientes").insert({
       id: newId,
       nome: displayName,
       tipo: "PF",
@@ -904,7 +904,7 @@ async function ensureProcessoFromClienteFile(
   const tipoAcao = extracted.tipo_acao;
   const modeloCobranca = extracted.modelo_cobranca;
 
-  const supabase = getSupabaseClient();
+  const supabase = getSupabaseServiceClient();
   const fields: ExtractedProcessFields = {
     numero_cnj: numeroCnj,
     tipo_acao: tipoAcao,
