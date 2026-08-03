@@ -36,9 +36,8 @@ export async function POST(request: Request) {
         });
         send({ type: "result", ok: true, ...result });
       } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
         console.error("[ReadFile] Erro:", err);
-        send({ type: "result", ok: false, error: message });
+        send({ type: "result", ok: false, error: "Não foi possível processar o arquivo." });
       } finally {
         controller.close();
       }

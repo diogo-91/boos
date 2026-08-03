@@ -12,8 +12,9 @@ const STALE_AFTER_MS = 10 * 60 * 1000;
 export async function acquireScanLock(): Promise<string | null> {
   const staleBefore = new Date(Date.now() - STALE_AFTER_MS).toISOString();
   const token = new Date().toISOString();
+  const supabase = getSupabaseClient();
 
-  const { data, error } = await getSupabaseClient()
+  const { data, error } = await supabase
     .from("drive_scan_lock")
     .update({ locked: true, locked_at: token })
     .eq("id", LOCK_ID)
@@ -22,7 +23,18 @@ export async function acquireScanLock(): Promise<string | null> {
     .maybeSingle();
 
   if (error) throw error;
-  return data ? token : null;
+  if (data) return token;
+
+  // A linha "singleton" pode nunca ter sido criada na tabela — sem isso,
+  // update() nunca encontra nada pra atualizar, acquireScanLock sempre
+  // retorna false, e nenhum sync roda (409 permanente). Tenta criar; se já
+  // existir (corrida com outro processo, ou lock legítimo não-stale), o
+  // insert falha por violação de chave e é tratado como "não conseguiu".
+  const { error: insertError } = await supabase
+    .from("drive_scan_lock")
+    .insert({ id: LOCK_ID, locked: true, locked_at: token });
+
+  return insertError ? null : token;
 }
 
 export async function releaseScanLock(token: string): Promise<void> {

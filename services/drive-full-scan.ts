@@ -120,6 +120,27 @@ export type FullScanResult = {
 // Deixa margem de segurança para o limite de 5 min (300s) da function.
 const MAX_DURATION_MS = 4.5 * 60 * 1000;
 
+// Antes, o corte de tempo só era checado depois de terminar um cliente
+// inteiro — um cliente com volume muito grande de arquivos podia estourar o
+// maxDuration da plataforma antes de qualquer checkpoint ser salvo. Chamado
+// também depois de cada arquivo lido, não só depois de cada cliente.
+async function handleTimeoutIfNeeded(
+  result: FullScanResult,
+  startedAt: number,
+  statusFolderId: string,
+  clienteFolderId: string
+): Promise<boolean> {
+  if (Date.now() - startedAt <= MAX_DURATION_MS) return false;
+
+  try {
+    await saveCheckpoint(statusFolderId, clienteFolderId);
+  } catch (err) {
+    result.errors.push(`[checkpoint] Falha ao salvar ponto de retomada: ${err instanceof Error ? err.message : String(err)}`);
+  }
+  result.timedOut = true;
+  return true;
+}
+
 export async function runFullScan(): Promise<FullScanResult> {
   const startedAt = Date.now();
 
@@ -224,6 +245,10 @@ export async function runFullScan(): Promise<FullScanResult> {
             } catch (err) {
               result.errors.push(`[arquivo] ${file.name}: ${err instanceof Error ? err.message : JSON.stringify(err)}`);
             }
+
+            if (await handleTimeoutIfNeeded(result, startedAt, statusFolder.id, clienteItem.id)) {
+              break statusLoop;
+            }
           }
         } else {
           // Arquivo direto na pasta do cliente
@@ -242,19 +267,14 @@ export async function runFullScan(): Promise<FullScanResult> {
           } catch (err) {
             result.errors.push(`[arquivo] ${child.name}: ${err instanceof Error ? err.message : JSON.stringify(err)}`);
           }
+
+          if (await handleTimeoutIfNeeded(result, startedAt, statusFolder.id, clienteItem.id)) {
+            break statusLoop;
+          }
         }
       }
 
-      if (Date.now() - startedAt > MAX_DURATION_MS) {
-        // Falha em salvar o checkpoint não pode derrubar a resposta com as
-        // estatisticas ja acumuladas — só significa que a proxima execução
-        // vai reiniciar do começo em vez de retomar daqui.
-        try {
-          await saveCheckpoint(statusFolder.id, clienteItem.id);
-        } catch (err) {
-          result.errors.push(`[checkpoint] Falha ao salvar ponto de retomada: ${err instanceof Error ? err.message : String(err)}`);
-        }
-        result.timedOut = true;
+      if (await handleTimeoutIfNeeded(result, startedAt, statusFolder.id, clienteItem.id)) {
         break statusLoop;
       }
     }

@@ -55,7 +55,8 @@ function mapPersonTypeToDb(value: Client["personType"]) {
 }
 
 function mapClientStatusFromDb(value: unknown): Client["status"] {
-  switch (String(value)) {
+  const raw = String(value);
+  switch (raw) {
     case "ativo":
       return "Ativo";
     case "audiencia":
@@ -71,7 +72,11 @@ function mapClientStatusFromDb(value: unknown): Client["status"] {
     case "parceiros":
       return "Parceiros";
     case "contratacao":
+      return "Contratação";
     default:
+      // Valor inconsistente no banco (nunca deveria acontecer) mascarado
+      // como "Contratação" sem nenhum sinal — loga pra não passar batido.
+      console.error(`[mappers] Status de cliente desconhecido no banco: "${raw}" — tratando como "Contratação"`);
       return "Contratação";
   }
 }
@@ -86,7 +91,8 @@ function mapClientStatusToDb(value: Client["status"]) {
 }
 
 function mapProcessStatusFromDb(value: unknown): LegalProcess["status"] {
-  switch (String(value)) {
+  const raw = String(value);
+  switch (raw) {
     case "ativo":
       return "Ativo";
     case "contratacao":
@@ -109,6 +115,9 @@ function mapProcessStatusFromDb(value: unknown): LegalProcess["status"] {
     case "em_andamento":
       return "Andamento";
     default:
+      // Valor inconsistente no banco (nunca deveria acontecer) mascarado
+      // como "Ativo" sem nenhum sinal — loga pra não passar batido.
+      console.error(`[mappers] Status de processo desconhecido no banco: "${raw}" — tratando como "Ativo"`);
       return "Ativo";
   }
 }

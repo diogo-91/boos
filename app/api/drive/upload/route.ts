@@ -80,10 +80,9 @@ export async function POST(request: Request) {
 
     return NextResponse.json({ file: data });
   } catch (error) {
-    const msg = error instanceof Error ? error.message : String(error);
-    console.error("[Drive] Falha ao fazer upload:", msg);
+    console.error("[Drive] Falha ao fazer upload:", error);
     return NextResponse.json(
-      { message: `Não foi possível fazer o upload: ${msg}` },
+      { message: "Não foi possível fazer o upload do arquivo." },
       { status: 500 }
     );
   }

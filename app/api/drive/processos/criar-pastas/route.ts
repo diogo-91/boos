@@ -1,14 +1,14 @@
 import { NextResponse } from "next/server";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { criarPastaProcesso } from "@/services/google-drive";
+import { isValidSyncSecret } from "@/lib/sync-auth";
 import type { Client, LegalProcess } from "@/lib/types";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
 
 export async function POST(request: Request) {
-  const secret = request.headers.get("x-sync-secret");
-  if (secret !== process.env.DRIVE_SYNC_SECRET) {
+  if (!isValidSyncSecret(request)) {
     return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
   }
 
