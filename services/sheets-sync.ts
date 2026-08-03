@@ -41,6 +41,24 @@ function normalizeName(raw: string): string {
     .replace(/\s+/g, " ");
 }
 
+// Parse CSV respeitando campos com vírgula entre aspas.
+function parseCsvLine(line: string): string[] {
+  const cols: string[] = [];
+  let current = "";
+  let inQuotes = false;
+  for (const ch of line) {
+    if (ch === '"') { inQuotes = !inQuotes; continue; }
+    if (ch === "," && !inQuotes) { cols.push(current.trim()); current = ""; continue; }
+    current += ch;
+  }
+  cols.push(current.trim());
+  return cols;
+}
+
+// Maior índice usado em SHEET_COLUMN + 1 — o mínimo de colunas que a
+// planilha precisa ter pros índices fixos abaixo ainda fazerem sentido.
+const MIN_EXPECTED_COLUMNS = Math.max(...Object.values(SHEET_COLUMN)) + 1;
+
 export async function readSheetRows(): Promise<SheetRow[]> {
   const drive = getGoogleDriveClient();
 
@@ -49,20 +67,24 @@ export async function readSheetRows(): Promise<SheetRow[]> {
     { responseType: "text" }
   );
 
-  const lines = (res.data as string).trim().split("\n").slice(1); // pula cabeçalho
+  const [headerLine, ...lines] = (res.data as string).trim().split("\n");
+
+  // Sem isso, uma coluna removida da planilha desloca todos os índices
+  // fixos abaixo pro lugar errado — sem nenhum erro. Não valida por NOME de
+  // cada coluna (exigiria saber o cabeçalho real da planilha em produção),
+  // mas pelo menos garante que não faltam colunas antes de gravar qualquer
+  // coisa no banco.
+  const headerColumns = headerLine ? parseCsvLine(headerLine) : [];
+  if (headerColumns.length < MIN_EXPECTED_COLUMNS) {
+    throw new Error(
+      `Cabeçalho da planilha tem ${headerColumns.length} coluna(s), esperava pelo menos ${MIN_EXPECTED_COLUMNS} — a estrutura da planilha pode ter mudado. Sync abortado antes de gravar dado no campo errado.`
+    );
+  }
+
   const rows: SheetRow[] = [];
 
   for (const line of lines) {
-    // Parse CSV respeitando campos com vírgula entre aspas
-    const cols: string[] = [];
-    let current = "";
-    let inQuotes = false;
-    for (const ch of line) {
-      if (ch === '"') { inQuotes = !inQuotes; continue; }
-      if (ch === "," && !inQuotes) { cols.push(current.trim()); current = ""; continue; }
-      current += ch;
-    }
-    cols.push(current.trim());
+    const cols = parseCsvLine(line);
 
     const cliente = cols[SHEET_COLUMN.cliente];
     const cnj = cols[SHEET_COLUMN.cnj];
