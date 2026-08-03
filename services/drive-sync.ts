@@ -22,25 +22,35 @@ async function callDriveApi<T>(
   return payload;
 }
 
-export async function syncClientDriveFolder(client: Client): Promise<Client> {
+export type DriveSyncResult<T> = { data: T; error: string | null };
+
+// As três funções abaixo nunca lançam — a operação principal (cadastro do
+// cliente/processo, mudança de status) já foi salva no banco antes de
+// chegar aqui, e uma falha no Drive não deve desfazer isso. Mas o erro
+// precisa chegar em quem chama, pra parar de mostrar toast de sucesso
+// quando a pasta não foi criada/movida — um registro sem driveFolderId é
+// justamente o candidato ao match ambíguo por nome do A3.
+
+export async function syncClientDriveFolder(client: Client): Promise<DriveSyncResult<Client>> {
   try {
     const result = await callDriveApi<{ cliente: Client }>(
       "/api/drive/clientes",
       "POST",
       { cliente: client }
     );
-    return result.cliente;
+    return { data: result.cliente, error: null };
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha ao criar a pasta no Google Drive.";
     console.error("[Drive] Criação da pasta do cliente não concluída:", error);
-    return client;
+    return { data: client, error: message };
   }
 }
 
 export async function syncProcessDriveFolder(
   client: Client | undefined,
   process: LegalProcess
-): Promise<LegalProcess> {
-  if (!client?.driveFolderId) return process;
+): Promise<DriveSyncResult<LegalProcess>> {
+  if (!client?.driveFolderId) return { data: process, error: null };
 
   try {
     const result = await callDriveApi<{ processo: LegalProcess }>(
@@ -48,18 +58,19 @@ export async function syncProcessDriveFolder(
       "POST",
       { cliente: client, processo: process }
     );
-    return result.processo;
+    return { data: result.processo, error: null };
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha ao criar a pasta do processo no Google Drive.";
     console.error("[Drive] Criação da pasta do processo não concluída:", error);
-    return process;
+    return { data: process, error: message };
   }
 }
 
 export async function syncClientStatusFolder(
   client: Client,
   novoStatus: ClientStatus
-): Promise<Client> {
-  if (!client.driveFolderId) return client;
+): Promise<DriveSyncResult<Client>> {
+  if (!client.driveFolderId) return { data: client, error: null };
 
   try {
     const result = await callDriveApi<{ cliente: Client }>(
@@ -67,9 +78,10 @@ export async function syncClientStatusFolder(
       "PATCH",
       { cliente: client, novoStatus }
     );
-    return result.cliente;
+    return { data: result.cliente, error: null };
   } catch (error) {
+    const message = error instanceof Error ? error.message : "Falha ao mover a pasta do cliente no Google Drive.";
     console.error("[Drive] Movimentação da pasta do cliente não concluída:", error);
-    return client;
+    return { data: client, error: message };
   }
 }

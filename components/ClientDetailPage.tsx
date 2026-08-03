@@ -37,6 +37,7 @@ export function ClientDetailPage({ clientId }: ClientDetailPageProps) {
     updateClient,
     updateClientStatus,
     refreshClient,
+    showToast,
     isLoading
   } = useOperationalData();
 
@@ -85,10 +86,14 @@ export function ClientDetailPage({ clientId }: ClientDetailPageProps) {
 
     setIsCreatingFolder(true);
     try {
-      const updated = await syncClientDriveFolder(client!);
-      if (updated.driveFolderId) {
-        setLocalDriveFolderId(updated.driveFolderId);
-        refreshClient(updated);
+      const drive = await syncClientDriveFolder(client!);
+      if (drive.error) {
+        showToast(`Não foi possível criar a pasta no Drive: ${drive.error}`, "error");
+        return;
+      }
+      if (drive.data.driveFolderId) {
+        setLocalDriveFolderId(drive.data.driveFolderId);
+        refreshClient(drive.data);
         setIsDriveBrowserOpen(true);
       }
     } finally {

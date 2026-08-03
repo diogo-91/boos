@@ -155,8 +155,15 @@ export function OperationalDataProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     if (!isHydrated || isSupabaseConfigured) return;
-    persistLocalData(clients, processes);
-  }, [clients, isHydrated, processes]);
+    const saved = persistLocalData(clients, processes);
+    if (!saved) {
+      // queueMicrotask evita setState síncrono dentro do corpo do efeito
+      // (dispara logo em seguida, fora do ciclo de render atual).
+      queueMicrotask(() => {
+        showToast("Não foi possível salvar os dados localmente (armazenamento cheio ou bloqueado). Suas últimas alterações podem ser perdidas ao recarregar a página.", "error");
+      });
+    }
+  }, [clients, isHydrated, processes, showToast]);
 
   const createClient = useCallback(
     async (values: ClientFormValues): Promise<Client> => {
@@ -172,10 +179,14 @@ export function OperationalDataProvider({ children }: { children: ReactNode }) {
 
       try {
         const saved = await criarCliente(draftWithPartner, partnerId);
-        const savedWithDrive = await syncClientDriveFolder(saved);
-        setClients((prev) => attachPartnerNames([savedWithDrive, ...prev], partners));
-        showToast("Cliente cadastrado com sucesso.");
-        return savedWithDrive;
+        const drive = await syncClientDriveFolder(saved);
+        setClients((prev) => attachPartnerNames([drive.data, ...prev], partners));
+        if (drive.error) {
+          showToast(`Cliente cadastrado, mas a pasta no Drive não foi criada: ${drive.error}`, "error");
+        } else {
+          showToast("Cliente cadastrado com sucesso.");
+        }
+        return drive.data;
       } catch (error) {
         const message = getErrorMessage(error, "Erro ao cadastrar cliente.");
         showToast(message, "error");
@@ -248,12 +259,12 @@ export function OperationalDataProvider({ children }: { children: ReactNode }) {
 
       try {
         const saved = await atualizarCliente(next, existing.partnerId ?? null);
-        const savedWithDrive = await syncClientStatusFolder(saved, status);
+        const drive = await syncClientStatusFolder(saved, status);
         setClients((prev) =>
           attachPartnerNames(
             prev.map((c) =>
               c.id === clientId
-                ? { ...savedWithDrive, processIds: c.processIds }
+                ? { ...drive.data, processIds: c.processIds }
                 : c
             ),
             partners
@@ -261,13 +272,17 @@ export function OperationalDataProvider({ children }: { children: ReactNode }) {
         );
         const changed = await tryRegisterStatusHistory(
           "cliente",
-          savedWithDrive.id,
+          drive.data.id,
           existing.status,
           status,
           date
         );
         if (changed) setStatusHistoryVersion((v) => v + 1);
-        showToast("Status do cliente atualizado.");
+        if (drive.error) {
+          showToast(`Status atualizado, mas a pasta no Drive não foi movida: ${drive.error}`, "error");
+        } else {
+          showToast("Status do cliente atualizado.");
+        }
       } catch (error) {
         const message = getErrorMessage(error, "Erro ao atualizar status do cliente.");
         showToast(message, "error");
@@ -297,17 +312,21 @@ export function OperationalDataProvider({ children }: { children: ReactNode }) {
       try {
         const saved = await criarProcesso(draft);
         const owner = clients.find((c) => c.id === saved.clientId);
-        const savedWithDrive = await syncProcessDriveFolder(owner, saved);
-        setProcesses((prev) => [savedWithDrive, ...prev]);
+        const drive = await syncProcessDriveFolder(owner, saved);
+        setProcesses((prev) => [drive.data, ...prev]);
         setClients((prev) =>
           prev.map((c) =>
-            c.id === savedWithDrive.clientId
-              ? { ...c, processIds: [savedWithDrive.id, ...c.processIds] }
+            c.id === drive.data.clientId
+              ? { ...c, processIds: [drive.data.id, ...c.processIds] }
               : c
           )
         );
-        showToast("Processo cadastrado com sucesso.");
-        return savedWithDrive;
+        if (drive.error) {
+          showToast(`Processo cadastrado, mas a pasta no Drive não foi criada: ${drive.error}`, "error");
+        } else {
+          showToast("Processo cadastrado com sucesso.");
+        }
+        return drive.data;
       } catch (error) {
         const message = getErrorMessage(error, "Erro ao cadastrar processo.");
         showToast(message, "error");

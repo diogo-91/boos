@@ -3,6 +3,9 @@ import { runDriveSync } from "@/services/drive-sync-engine";
 import { acquireScanLock, releaseScanLock } from "@/services/drive-scan-lock";
 
 export const runtime = "nodejs";
+// Sem isso, o sync incremental não tinha corte de tempo (diferente do
+// scan-full), e um lock preso por mais de 10 minutos era plausível.
+export const maxDuration = 300;
 
 export async function POST(request: Request) {
   const secret = request.headers.get("x-sync-secret");
@@ -10,8 +13,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const acquired = await acquireScanLock();
-  if (!acquired) {
+  const lockToken = await acquireScanLock();
+  if (!lockToken) {
     return NextResponse.json(
       { ok: false, error: "Já existe uma varredura em andamento no Google Drive." },
       { status: 409 }
@@ -26,7 +29,7 @@ export async function POST(request: Request) {
     console.error("[DriveSync] Erro crítico:", err);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   } finally {
-    await releaseScanLock();
+    await releaseScanLock(lockToken);
   }
 }
 

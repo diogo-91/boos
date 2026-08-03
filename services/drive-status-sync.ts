@@ -23,10 +23,17 @@ async function findClienteByNome(nome: string) {
   const { data } = await getSupabaseClient()
     .from("clientes")
     .select("id,nome,drive_path,drive_folder_id")
-    .eq("nome", nome)
-    .limit(1)
-    .maybeSingle();
-  return data ?? null;
+    .eq("nome", nome);
+
+  const candidates = data ?? [];
+
+  // Mais de um cliente cadastrado com o mesmo nome (homônimos reais) — não dá
+  // pra saber qual pasta pertence a qual sem ambiguidade. Melhor sinalizar e
+  // não vincular ninguém do que vincular a pasta de uma pessoa ao cadastro
+  // de outra (mesmo risco do C2, aqui pelo caminho da varredura completa).
+  if (candidates.length > 1) return { ambiguous: true as const, cliente: null };
+
+  return { ambiguous: false as const, cliente: candidates[0] ?? null };
 }
 
 // Pasta recriada/duplicada no Drive para um cliente que já existe no
@@ -36,17 +43,33 @@ async function linkExistingClienteToFolder(
   drivePath: string,
   nome: string
 ): Promise<DriveClienteRecord | null> {
-  const existing = await findClienteByNome(nome);
-  if (!existing) return null;
+  const { ambiguous, cliente: existing } = await findClienteByNome(nome);
 
-  if (!existing.drive_folder_id) {
-    await getSupabaseClient()
-      .from("clientes")
-      .update({ drive_folder_id: folderId, drive_path: drivePath })
-      .eq("id", existing.id);
+  if (ambiguous) {
+    throw new Error(
+      `Mais de um cliente cadastrado com o nome "${nome}" — vínculo da pasta não pôde ser feito automaticamente, verifique manualmente.`
+    );
   }
 
-  return { id: existing.id, nome: existing.nome, drive_path: existing.drive_path ?? drivePath };
+  if (!existing) return null;
+
+  // Esta função só roda quando findClienteByDriveFolderId(folderId) já não
+  // achou ninguém pra ESTA pasta — então, se o cliente achado por nome já
+  // tem uma pasta vinculada, ela necessariamente é OUTRA pasta. Isso não é
+  // o caso legítimo de "pasta recriada" (aquele cliente já tem a dele) — é
+  // homônimo: nome igual, pessoa diferente. Não vincula a pasta errada.
+  if (existing.drive_folder_id) {
+    throw new Error(
+      `Cliente "${nome}" já possui outra pasta vinculada — a pasta ${folderId} parece ser de um homônimo, verifique manualmente.`
+    );
+  }
+
+  await getSupabaseClient()
+    .from("clientes")
+    .update({ drive_folder_id: folderId, drive_path: drivePath })
+    .eq("id", existing.id);
+
+  return { id: existing.id, nome: existing.nome, drive_path: drivePath };
 }
 
 export async function linkOrCreateClienteFromFolder(

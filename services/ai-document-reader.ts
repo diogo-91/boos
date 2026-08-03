@@ -8,7 +8,7 @@ import {
   folderNameToDisplayName,
   matchStatusFolderKey
 } from "@/lib/drive-status-map";
-import { normalizeDocument } from "@/lib/validation";
+import { normalizeDocument, isValidCpfCnpj } from "@/lib/validation";
 import { hojeLocalISO } from "@/lib/date-utils";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
@@ -321,10 +321,13 @@ function sanitizeValue(key: string, raw: unknown): string | null {
   }
 
   // CPF/CNPJ: guarda só os dígitos, sem pontuação, para bater com
-  // qualquer outro cadastro do mesmo documento independente de formatação
+  // qualquer outro cadastro do mesmo documento independente de formatação.
+  // Valida o dígito verificador — a IA pode ler um número errado do
+  // documento, e sem essa checagem ele ia direto pro banco (e podia colidir
+  // por acaso com o CPF de outra pessoa, disparando o merge do A5).
   if (key === "cpf_cnpj") {
     const digits = normalizeDocument(v);
-    return digits || null;
+    return digits && isValidCpfCnpj(digits) ? digits : null;
   }
 
   return v;
@@ -384,9 +387,11 @@ async function getFolderName(folderId: string): Promise<string | null> {
   return data.name ?? null;
 }
 
-async function findClientByFolderName(folderId: string): Promise<string | null> {
+type FolderNameMatch = { clientId: string | null; ambiguous: boolean };
+
+async function findClientByFolderName(folderId: string): Promise<FolderNameMatch> {
   const folderName = await getFolderName(folderId);
-  if (!folderName) return null;
+  if (!folderName) return { clientId: null, ambiguous: false };
 
   const displayName = folderNameToDisplayName(folderName);
 
@@ -397,31 +402,49 @@ async function findClientByFolderName(folderId: string): Promise<string | null> 
   const { data: found } = await getSupabaseClient()
     .from("clientes")
     .select("id,drive_folder_id")
-    .ilike("nome", displayName)
-    .limit(1)
-    .maybeSingle();
+    .ilike("nome", displayName);
 
-  // Só grava o vínculo se o cliente ainda não tiver uma pasta — nunca
-  // sobrescreve um drive_folder_id já existente, que pode estar correto.
-  if (found?.id && !found.drive_folder_id) {
+  const candidates = found ?? [];
+
+  // Mais de um cliente cadastrado com o mesmo nome (homônimos reais) — não dá
+  // pra saber qual pasta pertence a qual sem ambiguidade. Melhor não vincular
+  // ninguém do que vincular a pasta de uma pessoa ao cadastro de outra.
+  if (candidates.length > 1) {
+    return { clientId: null, ambiguous: true };
+  }
+
+  const match = candidates[0];
+
+  // Esta função só roda quando findClientByDriveFolderId(folderId) já não
+  // achou ninguém pra ESTA pasta — então, se o cliente achado por nome já
+  // tem uma pasta vinculada, ela necessariamente é OUTRA pasta. Não é o
+  // caso de "pasta recriada" pro mesmo cliente — é homônimo, pessoa
+  // diferente. Trata como ambíguo: não vincula, não sobrescreve nada.
+  if (match?.drive_folder_id) {
+    return { clientId: null, ambiguous: true };
+  }
+
+  if (match?.id) {
     await getSupabaseClient()
       .from("clientes")
       .update({ drive_folder_id: folderId })
-      .eq("id", found.id);
+      .eq("id", match.id);
   }
 
-  return found?.id ?? null;
+  return { clientId: match?.id ?? null, ambiguous: false };
 }
 
-async function findClientByCpfCnpj(cpfCnpj: string | undefined): Promise<string | null> {
+async function findClientByCpfCnpj(
+  cpfCnpj: string | undefined
+): Promise<{ id: string; driveFolderId: string | null } | null> {
   if (!cpfCnpj) return null;
   const { data } = await getSupabaseClient()
     .from("clientes")
-    .select("id")
+    .select("id,drive_folder_id")
     .eq("cpf_cnpj", cpfCnpj)
     .limit(1)
     .maybeSingle();
-  return data?.id ?? null;
+  return data ? { id: data.id, driveFolderId: data.drive_folder_id ?? null } : null;
 }
 
 async function findProcessByDriveFolderId(folderId: string) {
@@ -537,18 +560,33 @@ export async function readDriveFile(
     result.skipReason = "Arquivo na pasta de status, não dentro de um cliente";
     emit("context", "skip", result.skipReason);
     return result;
+  }
+
+  // Arquivo direto na raiz da pasta do processo, ou dentro de uma subpasta
+  // dela (inicial/, peticoes_subsequentes/, ou qualquer outra criada
+  // manualmente). Usa o nome real da subpasta em vez de assumir "inicial"
+  // pra tudo — senão uma petição subsequente é classificada como documento
+  // inicial e dispara a lógica de criação/atualização de processo por CNJ
+  // pro tipo errado.
+  const processFromParent = await findProcessByDriveFolderId(parentFolderId);
+  const processFromGrandparent =
+    !processFromParent && grandParentId ? await findProcessByDriveFolderId(grandParentId) : null;
+  const processRecord = processFromParent ?? processFromGrandparent;
+
+  if (processRecord) {
+    result.processId = processRecord.id;
+    result.clientId = processRecord.cliente_id;
+    folderContext = processFromParent
+      ? fileName
+      : `${(await getFolderName(parentFolderId)) ?? "processo"}/${fileName}`;
   } else if (grandParentId && statusMap[grandParentId]) {
     clientFolderId = parentFolderId;
   } else if (grandParentId) {
     clientFolderId = grandParentId;
-    folderContext = `documentos_pessoais/${fileName}`;
-  }
-
-  const processRecord = await findProcessByDriveFolderId(parentFolderId);
-  if (processRecord) {
-    result.processId = processRecord.id;
-    result.clientId = processRecord.cliente_id;
-    folderContext = `inicial/${fileName}`;
+    // Nome real da subpasta do cliente (documentos_pessoais, comunicacao, ou
+    // qualquer outra) em vez de assumir sempre "documentos_pessoais".
+    const realSubfolderName = (await getFolderName(parentFolderId)) ?? "documentos_pessoais";
+    folderContext = `${realSubfolderName}/${fileName}`;
   }
 
   const docType = detectDocumentType(fileName, folderContext);
@@ -610,9 +648,17 @@ export async function readDriveFile(
     return result;
   }
 
-  let clientId =
-    (await findClientByDriveFolderId(clientFolderId)) ??
-    (await findClientByFolderName(clientFolderId));
+  let clientId = await findClientByDriveFolderId(clientFolderId);
+  if (!clientId) {
+    const byName = await findClientByFolderName(clientFolderId);
+    if (byName.ambiguous) {
+      result.skipped = true;
+      result.skipReason = "Nome da pasta do cliente é ambíguo (mais de um cadastro com esse nome) — vínculo não foi feito automaticamente, verifique manualmente";
+      emit("match", "skip", result.skipReason);
+      return result;
+    }
+    clientId = byName.clientId;
+  }
 
   emit("match", "done", clientId ? "Cliente já cadastrado localizado" : "Novo cliente será cadastrado");
   emit("save", "active", "Salvando dados no cadastro");
@@ -675,9 +721,19 @@ export async function readDriveFile(
       // com um documento chegando por uma pasta diferente. Atualiza o existente
       // em vez de falhar, sem sobrescrever a pasta já vinculada a ele.
       if (error.code === "23505" && safe.cpf_cnpj) {
-        const existingId = await findClientByCpfCnpj(safe.cpf_cnpj);
-        if (existingId) {
-          await updateClientFields(existingId, {
+        const existing = await findClientByCpfCnpj(safe.cpf_cnpj);
+
+        // Só mescla se o cliente existente ainda não tem pasta (primeira vez
+        // que aparece um documento dele) ou se a pasta dele já É esta que
+        // estamos processando agora. Se ele já tem uma pasta DIFERENTE
+        // vinculada, o CPF pode ter sido mal lido pela IA e coincidir por
+        // acaso com o de outra pessoa — sobrescrever nome/endereço/telefone
+        // de um terceiro é pior do que simplesmente não gravar este documento.
+        const sameContext =
+          existing && (!existing.driveFolderId || existing.driveFolderId === clientFolderId);
+
+        if (existing && sameContext) {
+          await updateClientFields(existing.id, {
             nome: displayName,
             rg_ie: safe.rg_ie,
             data_nascimento_abertura: safe.data_nascimento_abertura,
@@ -687,7 +743,7 @@ export async function readDriveFile(
             telefone: safe.telefone,
             email: safe.email
           });
-          clientId = existingId;
+          clientId = existing.id;
           result.fieldsExtracted = [
             ...(extracted.rg_ie ? ["rg_ie"] : []),
             ...(extracted.data_nascimento_abertura ? ["data_nascimento_abertura"] : []),
@@ -698,6 +754,13 @@ export async function readDriveFile(
           ];
           emit("save", "done", "CPF/CNPJ já cadastrado — cliente existente atualizado");
           result.clientId = clientId;
+          return result;
+        }
+
+        if (existing && !sameContext) {
+          result.skipped = true;
+          result.skipReason = "CPF/CNPJ já cadastrado para outro cliente com uma pasta diferente vinculada — verifique manualmente, pode ser erro de extração ou documento na pasta errada";
+          emit("save", "skip", result.skipReason);
           return result;
         }
       }

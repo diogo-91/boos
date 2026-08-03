@@ -27,7 +27,7 @@ function sanitizeFolderName(value: string) {
   );
 }
 
-function escapeQueryValue(value: string) {
+export function escapeQueryValue(value: string) {
   return value.replace(/\\/g, "\\\\").replace(/'/g, "\\'");
 }
 

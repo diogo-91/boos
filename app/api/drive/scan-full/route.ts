@@ -12,8 +12,8 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
   }
 
-  const acquired = await acquireScanLock();
-  if (!acquired) {
+  const lockToken = await acquireScanLock();
+  if (!lockToken) {
     return NextResponse.json(
       { ok: false, error: "Já existe uma varredura em andamento no Google Drive." },
       { status: 409 }
@@ -28,6 +28,6 @@ export async function POST(request: Request) {
     console.error("[FullScan] Erro:", err);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   } finally {
-    await releaseScanLock();
+    await releaseScanLock(lockToken);
   }
 }

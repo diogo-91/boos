@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { getGoogleDriveClient, isGoogleDriveConfigured } from "@/lib/google/drive";
+import { escapeQueryValue } from "@/services/google-drive";
 
 export const runtime = "nodejs";
 
@@ -33,7 +34,7 @@ export async function GET(request: Request) {
   try {
     const drive = getGoogleDriveClient();
     const { data } = await drive.files.list({
-      q: `'${folderId}' in parents and trashed = false`,
+      q: `'${escapeQueryValue(folderId)}' in parents and trashed = false`,
       fields: "files(id,name,mimeType,webViewLink,size,modifiedTime)",
       orderBy: "name",
       pageSize: 100
