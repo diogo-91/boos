@@ -194,6 +194,7 @@ export async function runSheetSync(): Promise<SheetSyncResult> {
           .from("parceiros")
           .select("id")
           .eq("nome", parceiroNome)
+          .limit(1)
           .maybeSingle();
 
         let parceiroId = parceiroExistente?.id;

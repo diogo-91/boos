@@ -372,6 +372,7 @@ async function findClientByDriveFolderId(folderId: string) {
     .from("clientes")
     .select("id")
     .eq("drive_folder_id", folderId)
+    .limit(1)
     .maybeSingle();
   return data?.id ?? null;
 }
@@ -388,26 +389,20 @@ async function findClientByFolderName(folderId: string): Promise<string | null> 
 
   const displayName = folderNameToDisplayName(folderName);
 
-  const { data: exact } = await getSupabaseClient()
+  // Só nome exato (ignorando maiúsculas/minúsculas). Um match por aproximação
+  // de "contém o primeiro e o último nome" já existiu aqui e vinculou clientes
+  // errados a pastas de outras pessoas — com nomes curtos ou comuns, o
+  // trecho bate em qualquer um. Não vale o risco.
+  const { data: found } = await getSupabaseClient()
     .from("clientes")
-    .select("id")
+    .select("id,drive_folder_id")
     .ilike("nome", displayName)
+    .limit(1)
     .maybeSingle();
 
-  let found = exact;
-  if (!found) {
-    const tokens = displayName.split(" ");
-    const first = tokens[0];
-    const last = tokens[tokens.length - 1];
-    const { data } = await getSupabaseClient()
-      .from("clientes")
-      .select("id")
-      .ilike("nome", `%${first}%${last}%`)
-      .maybeSingle();
-    found = data;
-  }
-
-  if (found?.id) {
+  // Só grava o vínculo se o cliente ainda não tiver uma pasta — nunca
+  // sobrescreve um drive_folder_id já existente, que pode estar correto.
+  if (found?.id && !found.drive_folder_id) {
     await getSupabaseClient()
       .from("clientes")
       .update({ drive_folder_id: folderId })
@@ -423,6 +418,7 @@ async function findClientByCpfCnpj(cpfCnpj: string | undefined): Promise<string 
     .from("clientes")
     .select("id")
     .eq("cpf_cnpj", cpfCnpj)
+    .limit(1)
     .maybeSingle();
   return data?.id ?? null;
 }
@@ -432,6 +428,7 @@ async function findProcessByDriveFolderId(folderId: string) {
     .from("processos")
     .select("id,cliente_id")
     .eq("drive_folder_id", folderId)
+    .limit(1)
     .maybeSingle();
   return data ?? null;
 }
@@ -794,6 +791,7 @@ async function ensureProcessoFromClienteFile(
       .select("id")
       .eq("cliente_id", clienteId)
       .eq("numero_cnj", numeroCnj)
+      .limit(1)
       .maybeSingle();
 
     if (byCnj?.id) {

@@ -5,10 +5,15 @@ import { STATUS_DB_MAP, folderNameToDisplayName, parseProcessFolderName } from "
 export type DriveClienteRecord = { id: string; nome: string; drive_path: string };
 
 export async function findClienteByDriveFolderId(folderId: string): Promise<DriveClienteRecord | null> {
+  // .limit(1) é essencial aqui: sem ele, .maybeSingle() dá erro se houver mais
+  // de uma linha com o mesmo drive_folder_id (cadastro duplicado por bug
+  // anterior), o erro não é checado, e o cliente passa a parecer "não
+  // encontrado" — criando mais uma duplicata a cada varredura, indefinidamente.
   const { data } = await getSupabaseClient()
     .from("clientes")
     .select("id,nome,drive_path")
     .eq("drive_folder_id", folderId)
+    .limit(1)
     .maybeSingle();
   return data ? { ...data, drive_path: data.drive_path ?? "" } : null;
 }
@@ -104,6 +109,7 @@ export async function findProcessoByDriveFolderId(folderId: string) {
     .from("processos")
     .select("id,cliente_id")
     .eq("drive_folder_id", folderId)
+    .limit(1)
     .maybeSingle();
   return data ?? null;
 }
