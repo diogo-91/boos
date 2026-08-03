@@ -486,6 +486,23 @@ async function markFileProcessed(fileId: string, modifiedTime: string | null): P
   if (error) throw error;
 }
 
+// markFileProcessed já roda logo após a leitura por IA, antes de sabermos se
+// o vínculo com cliente/processo vai dar certo — de propósito, pra uma falha
+// transitória de gravação no banco não forçar reler o arquivo com IA de novo
+// (custo). Mas pra pulos que só um humano resolve (homônimo ambíguo, CPF que
+// bate com o de outro contexto, pasta sem estrutura reconhecida), isso deixa
+// o arquivo travado pra sempre: ele só seria relido se o modifiedTime no
+// Drive mudasse, o que normalmente não acontece. Essas chamadas desfazem a
+// marca nesses casos específicos, pra a próxima varredura tentar de novo.
+async function unmarkFileProcessed(fileId: string): Promise<void> {
+  const { error } = await getSupabaseClient()
+    .from("documentos_processados")
+    .delete()
+    .eq("file_id", fileId);
+
+  if (error) console.error("[AIReader] Falha ao desfazer marca de processado:", error);
+}
+
 async function getStatusFolderMap(): Promise<Record<string, string>> {
   const drive = getGoogleDriveClient();
   const { data } = await drive.files.list({
@@ -645,6 +662,7 @@ export async function readDriveFile(
     result.skipped = true;
     result.skipReason = "Não foi possível determinar a pasta do cliente";
     emit("match", "skip", result.skipReason);
+    await unmarkFileProcessed(fileId);
     return result;
   }
 
@@ -655,6 +673,7 @@ export async function readDriveFile(
       result.skipped = true;
       result.skipReason = "Nome da pasta do cliente é ambíguo (mais de um cadastro com esse nome) — vínculo não foi feito automaticamente, verifique manualmente";
       emit("match", "skip", result.skipReason);
+      await unmarkFileProcessed(fileId);
       return result;
     }
     clientId = byName.clientId;
@@ -761,6 +780,7 @@ export async function readDriveFile(
           result.skipped = true;
           result.skipReason = "CPF/CNPJ já cadastrado para outro cliente com uma pasta diferente vinculada — verifique manualmente, pode ser erro de extração ou documento na pasta errada";
           emit("save", "skip", result.skipReason);
+          await unmarkFileProcessed(fileId);
           return result;
         }
       }
