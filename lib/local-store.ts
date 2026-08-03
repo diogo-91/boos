@@ -1,5 +1,4 @@
 import type { Client, LegalProcess } from "@/lib/types";
-import { clients as mockClients, processes as mockProcesses } from "@/data/mock-data";
 
 const STORAGE_KEY = "base-operacional-boos:v2";
 
@@ -15,11 +14,11 @@ export function loadLocalData(): LocalStore {
 
     const parsed = JSON.parse(saved) as Partial<LocalStore>;
     return {
-      clients: parsed.clients?.length ? parsed.clients : mockClients,
-      processes: parsed.processes?.length ? parsed.processes : mockProcesses
+      clients: parsed.clients ?? [],
+      processes: parsed.processes ?? []
     };
   } catch {
-    return { clients: mockClients, processes: mockProcesses };
+    return { clients: [], processes: [] };
   }
 }
 
