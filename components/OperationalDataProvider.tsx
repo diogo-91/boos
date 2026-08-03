@@ -83,11 +83,12 @@ async function tryRegisterStatusHistory(
   entity: "cliente" | "processo",
   entityId: string,
   previousStatus: string,
-  newStatus: string
+  newStatus: string,
+  eventDate?: string
 ) {
   if (previousStatus === newStatus) return false;
   try {
-    await registrarHistoricoStatus({ entity, entityId, previousStatus, newStatus });
+    await registrarHistoricoStatus({ entity, entityId, previousStatus, newStatus, eventDate });
     return true;
   } catch (error) {
     console.error("[Supabase] Falha ao registrar histórico de status:", error);
@@ -262,7 +263,8 @@ export function OperationalDataProvider({ children }: { children: ReactNode }) {
           "cliente",
           savedWithDrive.id,
           existing.status,
-          status
+          status,
+          date
         );
         if (changed) setStatusHistoryVersion((v) => v + 1);
         showToast("Status do cliente atualizado.");
@@ -380,7 +382,8 @@ export function OperationalDataProvider({ children }: { children: ReactNode }) {
           "processo",
           saved.id,
           existing.status,
-          status
+          status,
+          date
         );
         if (changed) setStatusHistoryVersion((v) => v + 1);
         showToast("Status do processo atualizado.");

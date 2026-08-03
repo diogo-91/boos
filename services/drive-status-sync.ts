@@ -1,6 +1,7 @@
 import type { ClientStatus } from "@/lib/types";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { STATUS_DB_MAP, folderNameToDisplayName, parseProcessFolderName } from "@/lib/drive-status-map";
+import { hojeLocalISO } from "@/lib/date-utils";
 
 export type DriveClienteRecord = { id: string; nome: string; drive_path: string };
 
@@ -68,11 +69,11 @@ export async function linkOrCreateClienteFromFolder(
     status: STATUS_DB_MAP[status],
     cpf_cnpj: "",
     rg_ie: "",
-    data_cadastro: new Date().toISOString().slice(0, 10),
-    data_ativacao: status === "Ativo" ? new Date().toISOString().slice(0, 10) : null,
+    data_cadastro: hojeLocalISO(),
+    data_ativacao: status === "Ativo" ? hojeLocalISO() : null,
     data_finalizacao:
       status === "Arquivado" || status === "Cancelado"
-        ? new Date().toISOString().slice(0, 10)
+        ? hojeLocalISO()
         : null,
     drive_folder_id: folderId,
     drive_path
@@ -93,10 +94,10 @@ export async function updateClienteStatusFromFolder(
     .update({
       status: STATUS_DB_MAP[status],
       drive_path: `${statusFolderName} › ${folderName}`,
-      data_ativacao: status === "Ativo" ? new Date().toISOString().slice(0, 10) : undefined,
+      data_ativacao: status === "Ativo" ? hojeLocalISO() : undefined,
       data_finalizacao:
         status === "Arquivado" || status === "Cancelado"
-          ? new Date().toISOString().slice(0, 10)
+          ? hojeLocalISO()
           : undefined
     })
     .eq("drive_folder_id", folderId);

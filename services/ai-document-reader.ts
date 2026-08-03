@@ -9,6 +9,7 @@ import {
   matchStatusFolderKey
 } from "@/lib/drive-status-map";
 import { normalizeDocument } from "@/lib/validation";
+import { hojeLocalISO } from "@/lib/date-utils";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -665,7 +666,7 @@ export async function readDriveFile(
       nome_fantasia: safe.nome_fantasia ?? null,
       telefone: safe.telefone ?? null,
       email: safe.email ?? null,
-      data_cadastro: new Date().toISOString().slice(0, 10),
+      data_cadastro: hojeLocalISO(),
       drive_folder_id: clientFolderId
     });
 

@@ -3,6 +3,7 @@ import {
   getGoogleDriveClient,
   getGoogleDriveRootFolderId
 } from "@/lib/google/drive";
+import { getSupabaseClient } from "@/lib/supabase/client";
 import { FOLDER_MIME } from "@/lib/drive-status-map";
 
 const STATUS_FOLDER_NAMES: Record<string, string> = {
@@ -120,6 +121,16 @@ async function createDefaultClientStructure(clientFolderId: string) {
   await findOrCreateFolder("comunicacao", clientFolderId);
 }
 
+async function findClienteOwningFolder(folderId: string): Promise<string | null> {
+  const { data } = await getSupabaseClient()
+    .from("clientes")
+    .select("id")
+    .eq("drive_folder_id", folderId)
+    .limit(1)
+    .maybeSingle();
+  return data?.id ?? null;
+}
+
 async function createDefaultProcessStructure(processFolderId: string) {
   await findOrCreateFolder("inicial", processFolderId);
   await findOrCreateFolder("peticoes_subsequentes", processFolderId);
@@ -128,7 +139,23 @@ async function createDefaultProcessStructure(processFolderId: string) {
 export async function criarPastaCliente(client: Client) {
   const parentFolder = await getStatusParentFolder(client.status);
   const folderName = buildClientFolderName(client);
-  const folder = await findOrCreateFolder(folderName, parentFolder.id);
+  let folder = await findOrCreateFolder(folderName, parentFolder.id);
+
+  // Nomes sanitizados podem colidir entre clientes diferentes (acentos, hífen
+  // vs espaço, nomes muito curtos etc. viram o mesmo slug). Reaproveitar a
+  // pasta encontrada sem checar o dono misturaria documentos e dados
+  // pessoais extraídos pela IA de um cliente no cadastro de outro — nunca
+  // reusa uma pasta que já pertence a outro cliente no banco.
+  const ownerId = await findClienteOwningFolder(folder.id);
+  if (ownerId && ownerId !== client.id) {
+    // findOrCreateFolder (não createFolder) é essencial aqui: numa nova
+    // tentativa após falha de rede, ou na race entre a criação automática do
+    // cadastro e o botão manual de abrir o Drive (M3), esse branch roda de
+    // novo — sem isso, cada retentativa criaria mais uma pasta duplicada em
+    // vez de reaproveitar a que já foi desambiguada da vez anterior.
+    folder = await findOrCreateFolder(`${folderName}_${client.id.slice(0, 8)}`, parentFolder.id);
+  }
+
   const drivePath = `${parentFolder.name} › ${folder.name}`;
 
   await createDefaultClientStructure(folder.id);

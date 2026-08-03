@@ -1,5 +1,19 @@
+const BRASILIA_TZ = "America/Sao_Paulo";
+
+// new Date().toISOString() sempre captura o dia em UTC — entre 21h e 23h59
+// no horário de Brasília (UTC-3) isso grava o dia seguinte. Usar o fuso
+// fixo do escritório em vez do fuso do processo/navegador evita o shift.
+export function hojeLocalISO() {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: BRASILIA_TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date());
+}
+
 export function todayInputValue() {
-  return new Date().toISOString().slice(0, 10);
+  return hojeLocalISO();
 }
 
 export function formatSyncTimestamp(iso: string) {

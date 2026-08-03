@@ -258,6 +258,18 @@ export async function runFullScan(): Promise<FullScanResult> {
         break statusLoop;
       }
     }
+
+    // A pasta do cliente do checkpoint não apareceu nesta pasta de status —
+    // provavelmente mudou de status (e de pasta física) entre a execução que
+    // salvou o checkpoint e esta retomada. Sem este reset, skipUntilClienteFolder
+    // continuaria true para as pastas de status seguintes e todo o resto da
+    // varredura seria pulado em silêncio.
+    if (skipUntilClienteFolder) {
+      result.errors.push(
+        `[checkpoint] Cliente do ponto de retomada não encontrado na pasta "${statusFolder.name}" (pode ter mudado de status entre execuções). Retomando normalmente a partir daqui.`
+      );
+      skipUntilClienteFolder = false;
+    }
   }
 
   if (!result.timedOut) {

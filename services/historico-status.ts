@@ -1,5 +1,6 @@
 import type { StatusHistoryEntity, StatusHistoryEntry } from "@/lib/types";
 import { getSupabaseClient } from "@/lib/supabase/client";
+import { hojeLocalISO } from "@/lib/date-utils";
 
 type HistoricoStatusRow = Record<string, unknown>;
 
@@ -54,7 +55,7 @@ export async function registrarHistoricoStatus({
   entityId,
   previousStatus,
   newStatus,
-  eventDate = new Date().toISOString().slice(0, 10),
+  eventDate = hojeLocalISO(),
   note
 }: RegistrarHistoricoStatusInput) {
   const { data, error } = await getSupabaseClient()

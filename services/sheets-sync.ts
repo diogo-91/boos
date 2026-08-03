@@ -144,19 +144,14 @@ export async function runSheetSync(): Promise<SheetSyncResult> {
         }
       }
 
-      // 2. Se não achou pelo CNJ, tenta pelo nome do cliente
+      // 2. Se não achou pelo CNJ, tenta pelo nome exato do cliente.
+      // Nunca faz match parcial/aproximado — um trecho de "duas primeiras palavras"
+      // existiu aqui e vinculava dados financeiros ao cliente errado sempre que
+      // nomes eram parciais ou colidiam (ex: "Maria" batendo em "José Maria Santos").
+      // O mesmo padrão já tinha sido removido de ai-document-reader.ts por esse motivo.
       if (!clienteId) {
         const nomeNorm = normalizeName(row.cliente);
         clienteId = clienteByNome.get(nomeNorm) ?? null;
-
-        // Tenta match parcial (primeiras 2 palavras)
-        if (!clienteId) {
-          const palavras = nomeNorm.split(" ").slice(0, 2).join(" ");
-          const entries = Array.from(clienteByNome.entries());
-          for (const [nome, id] of entries) {
-            if (nome.includes(palavras)) { clienteId = id; break; }
-          }
-        }
 
         // Se achou o cliente pelo nome e a planilha tem CNJ, atualiza o processo "A definir"
         if (clienteId && row.cnj && row.cnj !== "-") {
@@ -180,7 +175,12 @@ export async function runSheetSync(): Promise<SheetSyncResult> {
         }
       }
 
-      if (!clienteId) continue;
+      if (!clienteId) {
+        result.erros.push(
+          `${row.cliente}: cliente não encontrado (sem CNJ correspondente nem nome exato no cadastro) — verifique manualmente.`
+        );
+        continue;
+      }
 
       // 3. Atualiza parceiro no cliente
       const parceiroNome = row.indicacao && row.indicacao !== "-" ? row.indicacao.trim() : null;
