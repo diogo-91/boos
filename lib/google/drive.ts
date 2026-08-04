@@ -61,7 +61,8 @@ export async function getGoogleDriveRootFolderInfo() {
 
   const { data } = await drive.files.get({
     fileId: rootFolderId,
-    fields: "id,name,mimeType"
+    fields: "id,name,mimeType",
+    supportsAllDrives: true
   });
 
   return {
@@ -69,4 +70,26 @@ export async function getGoogleDriveRootFolderInfo() {
     name: data.name ?? "Pasta raiz",
     mimeType: data.mimeType ?? "application/vnd.google-apps.folder"
   };
+}
+
+// A pasta raiz configurada pode ser a própria Shared Drive ou uma subpasta
+// dentro dela — em ambos os casos o driveId (necessário pra changes.list e
+// changes.getStartPageToken) é obtido consultando o campo `driveId` da pasta,
+// em vez de assumir que GOOGLE_DRIVE_ROOT_FOLDER_ID já é o driveId.
+let cachedSharedDriveId: string | null | undefined;
+
+export async function getGoogleSharedDriveId(): Promise<string | null> {
+  if (cachedSharedDriveId !== undefined) return cachedSharedDriveId;
+
+  const drive = getGoogleDriveClient();
+  const rootFolderId = getGoogleDriveRootFolderId();
+
+  const { data } = await drive.files.get({
+    fileId: rootFolderId,
+    fields: "driveId",
+    supportsAllDrives: true
+  });
+
+  cachedSharedDriveId = data.driveId ?? null;
+  return cachedSharedDriveId;
 }

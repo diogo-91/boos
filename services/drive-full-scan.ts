@@ -21,7 +21,9 @@ async function listChildren(parentId: string) {
       fields: "nextPageToken,files(id,name,mimeType)",
       orderBy: "name",
       pageSize: 100,
-      pageToken
+      pageToken,
+      includeItemsFromAllDrives: true,
+      supportsAllDrives: true
     });
     for (const f of data.files ?? []) {
       if (f.id && f.name && f.mimeType) {

@@ -670,7 +670,7 @@ no navegador** — nunca coloque segredo nelas.
 | `NEXT_PUBLIC_GOOGLE_UPLOAD_ACCOUNT_HINT` | público | Sugere a conta Google na tela de autorização |
 | `GOOGLE_CLIENT_EMAIL` | servidor | E-mail da service account |
 | `GOOGLE_PRIVATE_KEY` | servidor | Chave privada (aceita `\n` literais) |
-| `GOOGLE_DRIVE_ROOT_FOLDER_ID` | servidor | Raiz usada pelas rotinas |
+| `GOOGLE_DRIVE_ROOT_FOLDER_ID` | servidor | Raiz usada pelas rotinas (precisa estar numa Shared Drive) |
 | `GOOGLE_SHEETS_ID` | servidor | Planilha de honorários |
 | `DRIVE_SYNC_SECRET` | servidor | Segredo das rotas de automação |
 | `GEMINI_API_KEY` | servidor | Chave da API Gemini (Google AI Studio) |
@@ -678,6 +678,17 @@ no navegador** — nunca coloque segredo nelas.
 
 Sem as variáveis do Supabase a aplicação sobe em modo local. Sem as do Drive, as
 rotas respondem `503` com mensagem explicando a configuração ausente.
+
+**`GOOGLE_DRIVE_ROOT_FOLDER_ID` precisa apontar para uma pasta dentro de uma
+Shared Drive (ou para a própria Shared Drive).** Contas de serviço não têm
+cota de armazenamento própria em "Meu Drive" — qualquer `files.create` direto
+numa pasta comum falha com `403 storageQuotaExceeded`. Para configurar:
+1. Crie uma Shared Drive no Google Drive (requer Google Workspace).
+2. Compartilhe-a com o e-mail de `GOOGLE_CLIENT_EMAIL` como "Gerenciador de conteúdo" (ou superior).
+3. Use o ID da Shared Drive (ou de uma subpasta dela) em `GOOGLE_DRIVE_ROOT_FOLDER_ID`.
+
+Todas as chamadas à API do Drive no código já passam `supportsAllDrives: true`
+(e `includeItemsFromAllDrives: true` em listagens) para funcionar com Shared Drives.
 
 ---
 

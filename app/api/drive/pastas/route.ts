@@ -37,7 +37,8 @@ export async function POST(request: Request) {
         mimeType: FOLDER_MIME,
         parents: [parentId]
       },
-      fields: "id,name,mimeType,modifiedTime"
+      fields: "id,name,mimeType,modifiedTime",
+      supportsAllDrives: true
     });
 
     return NextResponse.json({ folder: data });

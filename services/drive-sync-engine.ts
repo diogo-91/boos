@@ -1,5 +1,5 @@
 import type { ClientStatus } from "@/lib/types";
-import { getGoogleDriveClient, getGoogleDriveRootFolderId } from "@/lib/google/drive";
+import { getGoogleDriveClient, getGoogleDriveRootFolderId, getGoogleSharedDriveId } from "@/lib/google/drive";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { readDriveFile } from "@/services/ai-document-reader";
 import { FOLDER_MIME, STATUS_FOLDER_MAP, matchStatusFolderKey } from "@/lib/drive-status-map";
@@ -27,7 +27,10 @@ async function saveSyncToken(token: string) {
 }
 
 async function getStartPageToken(): Promise<string> {
-  const { data } = await getGoogleDriveClient().changes.getStartPageToken({});
+  const driveId = await getGoogleSharedDriveId();
+  const { data } = await getGoogleDriveClient().changes.getStartPageToken(
+    driveId ? { driveId, supportsAllDrives: true } : {}
+  );
   if (!data.startPageToken) throw new Error("Não foi possível obter o startPageToken.");
   return data.startPageToken;
 }
@@ -44,7 +47,9 @@ async function getStatusFolderIds(): Promise<Record<string, ClientStatus>> {
       q: `'${getGoogleDriveRootFolderId()}' in parents and mimeType = '${FOLDER_MIME}' and trashed = false`,
       fields: "nextPageToken,files(id,name)",
       pageSize: 100,
-      pageToken
+      pageToken,
+      includeItemsFromAllDrives: true,
+      supportsAllDrives: true
     });
 
     for (const file of data.files ?? []) {
@@ -60,7 +65,11 @@ async function getStatusFolderIds(): Promise<Record<string, ClientStatus>> {
 }
 
 async function getFileParentId(fileId: string): Promise<string | null> {
-  const { data } = await getGoogleDriveClient().files.get({ fileId, fields: "parents" });
+  const { data } = await getGoogleDriveClient().files.get({
+    fileId,
+    fields: "parents",
+    supportsAllDrives: true
+  });
   return data.parents?.[0] ?? null;
 }
 
@@ -101,13 +110,15 @@ export async function runDriveSync(): Promise<SyncResult> {
   const statusFolderIdSet = new Set(Object.keys(statusFolderIds));
 
   let nextPageToken: string | null | undefined = pageToken;
+  const driveId = await getGoogleSharedDriveId();
 
   while (nextPageToken) {
     const changesPage = await getGoogleDriveClient().changes.list({
       pageToken: nextPageToken,
       fields: "nextPageToken,newStartPageToken,changes(fileId,removed,file(id,name,mimeType,parents,trashed))",
-      includeItemsFromAllDrives: false,
-      supportsAllDrives: false,
+      includeItemsFromAllDrives: Boolean(driveId),
+      supportsAllDrives: Boolean(driveId),
+      driveId: driveId ?? undefined,
       pageSize: 100
     });
 

@@ -139,7 +139,11 @@ async function extractTextFromBuffer(buffer: Buffer, mimeType: string): Promise<
 
 async function downloadFileFromDrive(fileId: string): Promise<{ content: string; mimeType: string } | null> {
   const drive = getGoogleDriveClient();
-  const { data: meta } = await drive.files.get({ fileId, fields: "mimeType,name,size" });
+  const { data: meta } = await drive.files.get({
+    fileId,
+    fields: "mimeType,name,size",
+    supportsAllDrives: true
+  });
   const mimeType = meta.mimeType ?? "";
 
   // Tipos binários sem extração possível — pula
@@ -162,13 +166,13 @@ async function downloadFileFromDrive(fileId: string): Promise<{ content: string;
   // PDF e imagens — Claude lê nativamente; limite 20 MB
   if (CLAUDE_NATIVE_TYPES.has(mimeType)) {
     if (meta.size && Number(meta.size) > 20 * 1024 * 1024) return null;
-    const res = await drive.files.get({ fileId, alt: "media" }, { responseType: "arraybuffer" });
+    const res = await drive.files.get({ fileId, alt: "media", supportsAllDrives: true }, { responseType: "arraybuffer" });
     return { content: Buffer.from(res.data as ArrayBuffer).toString("base64"), mimeType };
   }
 
   // Tudo o mais: tenta extrair texto do binário
   if (meta.size && Number(meta.size) > 20 * 1024 * 1024) return null;
-  const res = await drive.files.get({ fileId, alt: "media" }, { responseType: "arraybuffer" });
+  const res = await drive.files.get({ fileId, alt: "media", supportsAllDrives: true }, { responseType: "arraybuffer" });
   const buffer = Buffer.from(res.data as ArrayBuffer);
   const text = await extractTextFromBuffer(buffer, mimeType);
   if (!text) return null;
@@ -447,7 +451,11 @@ async function findClientByDriveFolderId(folderId: string) {
 
 async function getFolderName(folderId: string): Promise<string | null> {
   const drive = getGoogleDriveClient();
-  const { data } = await drive.files.get({ fileId: folderId, fields: "name" });
+  const { data } = await drive.files.get({
+    fileId: folderId,
+    fields: "name",
+    supportsAllDrives: true
+  });
   return data.name ?? null;
 }
 
@@ -523,13 +531,21 @@ async function findProcessByDriveFolderId(folderId: string) {
 
 async function getParentFolderId(folderId: string): Promise<string | null> {
   const drive = getGoogleDriveClient();
-  const { data } = await drive.files.get({ fileId: folderId, fields: "parents" });
+  const { data } = await drive.files.get({
+    fileId: folderId,
+    fields: "parents",
+    supportsAllDrives: true
+  });
   return data.parents?.[0] ?? null;
 }
 
 async function getFileModifiedTime(fileId: string): Promise<string | null> {
   const drive = getGoogleDriveClient();
-  const { data } = await drive.files.get({ fileId, fields: "modifiedTime" });
+  const { data } = await drive.files.get({
+    fileId,
+    fields: "modifiedTime",
+    supportsAllDrives: true
+  });
   return data.modifiedTime ?? null;
 }
 
@@ -572,7 +588,9 @@ async function getStatusFolderMap(): Promise<Record<string, string>> {
   const { data } = await drive.files.list({
     q: `'${getGoogleDriveRootFolderId()}' in parents and mimeType = '${FOLDER_MIME}' and trashed = false`,
     fields: "files(id,name)",
-    pageSize: 30
+    pageSize: 30,
+    includeItemsFromAllDrives: true,
+    supportsAllDrives: true
   });
 
   const map: Record<string, string> = {};

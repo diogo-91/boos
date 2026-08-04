@@ -75,7 +75,8 @@ export async function POST(request: Request) {
         mimeType: file.type || "application/octet-stream",
         body: stream
       },
-      fields: "id,name,mimeType,size,modifiedTime,webViewLink"
+      fields: "id,name,mimeType,size,modifiedTime,webViewLink",
+      supportsAllDrives: true
     });
 
     return NextResponse.json({ file: data });

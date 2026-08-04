@@ -37,7 +37,9 @@ export async function GET(request: Request) {
       q: `'${escapeQueryValue(folderId)}' in parents and trashed = false`,
       fields: "files(id,name,mimeType,webViewLink,size,modifiedTime)",
       orderBy: "name",
-      pageSize: 100
+      pageSize: 100,
+      includeItemsFromAllDrives: true,
+      supportsAllDrives: true
     });
 
     const files: DriveFile[] = (data.files ?? [])

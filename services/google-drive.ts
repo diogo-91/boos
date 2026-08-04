@@ -56,7 +56,11 @@ function statusToFolderKey(status: ClientStatus | string) {
 
 async function getFolderParents(folderId: string) {
   const drive = getGoogleDriveClient();
-  const { data } = await drive.files.get({ fileId: folderId, fields: "parents" });
+  const { data } = await drive.files.get({
+    fileId: folderId,
+    fields: "parents",
+    supportsAllDrives: true
+  });
   return data.parents ?? [];
 }
 
@@ -64,7 +68,8 @@ async function createFolder(name: string, parentId: string) {
   const drive = getGoogleDriveClient();
   const { data } = await drive.files.create({
     requestBody: { name, mimeType: FOLDER_MIME, parents: [parentId] },
-    fields: "id,name"
+    fields: "id,name",
+    supportsAllDrives: true
   });
 
   if (!data.id) {
@@ -88,7 +93,9 @@ export async function findOrCreateFolder(name: string, parentId: string) {
     ].join(" and "),
     fields: "files(id,name)",
     spaces: "drive",
-    pageSize: 1
+    pageSize: 1,
+    includeItemsFromAllDrives: true,
+    supportsAllDrives: true
   });
 
   const existing = data.files?.[0];
@@ -214,7 +221,8 @@ export async function moverPastaClientePorStatus(
     fileId: client.driveFolderId,
     addParents: parentFolder.id,
     removeParents: removeParents.length > 0 ? removeParents.join(",") : undefined,
-    fields: "id,parents"
+    fields: "id,parents",
+    supportsAllDrives: true
   });
 
   return {

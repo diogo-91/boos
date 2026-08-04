@@ -11,11 +11,15 @@ export const runtime = "nodejs";
 // account alcance, mandando o id direto na URL.
 async function isManagedFile(fileId: string): Promise<boolean> {
   const drive = getGoogleDriveClient();
-  const { data } = await drive.files.get({ fileId, fields: "parents" });
+  const { data } = await drive.files.get({ fileId, fields: "parents", supportsAllDrives: true });
   const parentId = data.parents?.[0];
   if (!parentId) return false;
 
-  const { data: parentData } = await drive.files.get({ fileId: parentId, fields: "parents" });
+  const { data: parentData } = await drive.files.get({
+    fileId: parentId,
+    fields: "parents",
+    supportsAllDrives: true
+  });
   const grandParentId = parentData.parents?.[0];
 
   const candidateIds = [parentId, grandParentId].filter((v): v is string => Boolean(v));
@@ -53,7 +57,7 @@ export async function DELETE(
     }
 
     const drive = getGoogleDriveClient();
-    await drive.files.delete({ fileId: id });
+    await drive.files.delete({ fileId: id, supportsAllDrives: true });
     return NextResponse.json({ success: true });
   } catch (error) {
     console.error("[Drive] Falha ao deletar arquivo:", error);
