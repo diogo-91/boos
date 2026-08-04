@@ -34,11 +34,19 @@ export type ExtractedProcessFields = {
   tipo_acao?: string;
   parte_contraria?: string;
   vara_comarca?: string;
+  localizacao?: string;
   data_protocolo?: string;
+  data_encerramento?: string;
   modelo_cobranca?: string;
   valor_entrada?: string;
   percentual_exito?: string;
 };
+
+// Mesmas opções do <SelectInput> de "Localização do Processo" no formulário
+// (components/forms/ProcessFormModal.tsx) — só aceita um valor exato, senão
+// o formulário abriria com esse campo mostrando "—" mesmo tendo um valor
+// salvo no banco que não bate com nenhuma das opções do <select>.
+const LOCATION_OPTIONS = new Set(["Projudi", "Eproc PR", "Eproc SP", "Outro"]);
 
 export type DocumentType =
   | "documento_pessoal"
@@ -320,7 +328,9 @@ Extraia e retorne APENAS um objeto JSON:
   "tipo_acao": "tipo/natureza da ação (ex: Acidente de trabalho, Indenização por danos morais), ou null",
   "parte_contraria": "nome da parte contrária (réu/reclamado), ou null",
   "vara_comarca": "vara e comarca onde tramita, ou null",
+  "localizacao": "sistema eletrônico onde o processo tramita — EXATAMENTE um de: Projudi / Eproc PR / Eproc SP / Outro, ou null se não conseguir identificar com certeza",
   "data_protocolo": "data do protocolo no formato AAAA-MM-DD, ou null",
+  "data_encerramento": "data de encerramento/arquivamento do processo, se este documento indicar que o processo já foi encerrado, no formato AAAA-MM-DD, ou null",
   "nome": "nome completo do autor/cliente, ou null",
   "cpf_cnpj": "CPF do autor/cliente, ou null",
   "cpf_cnpj_citacao": "copie aqui, literalmente, o trecho exato do documento onde você leu esse CPF, ou null",
@@ -348,7 +358,9 @@ Retorne APENAS um objeto JSON com os campos que conseguir identificar com certez
   "tipo_acao": "tipo/natureza da ação (ex: Acidente de trabalho, Indenização por danos morais), ou null",
   "parte_contraria": "nome da parte contrária (réu/reclamado), ou null",
   "vara_comarca": "vara e comarca onde tramita, ou null",
+  "localizacao": "sistema eletrônico onde o processo tramita — EXATAMENTE um de: Projudi / Eproc PR / Eproc SP / Outro, ou null se não conseguir identificar com certeza",
   "data_protocolo": "data de protocolo/distribuição citada no documento, no formato AAAA-MM-DD, ou null",
+  "data_encerramento": "data de encerramento/arquivamento do processo, se este documento indicar isso (ex: sentença transitada em julgado, cumprimento de sentença quitado, acordo homologado), no formato AAAA-MM-DD, ou null",
   "modelo_cobranca": "um de: Indefinido / Entrada / Êxito / Entrada + Êxito / Recorrente, ou null",
   "valor_entrada": "valor de entrada em formato R$ 0.000,00, ou null",
   "percentual_exito": "porcentagem de êxito como número apenas (ex: 20), ou null",
@@ -505,6 +517,13 @@ function sanitizeValue(key: string, raw: unknown): string | null {
   if (key === "cpf_cnpj") {
     const digits = normalizeDocument(v);
     return digits && isValidCpfCnpj(digits) ? digits : null;
+  }
+
+  // Só aceita um dos valores exatos do <select> — qualquer outra coisa
+  // (variação de escrita, sigla diferente) fica de fora em vez de gravar
+  // um valor que o formulário não sabe mostrar.
+  if (key === "localizacao") {
+    return LOCATION_OPTIONS.has(v) ? v : null;
   }
 
   return v;
@@ -885,7 +904,9 @@ export async function readDriveFile(
       tipo_acao: extracted.tipo_acao,
       parte_contraria: extracted.parte_contraria,
       vara_comarca: extracted.vara_comarca,
+      localizacao: extracted.localizacao,
       data_protocolo: extracted.data_protocolo,
+      data_encerramento: extracted.data_encerramento,
       modelo_cobranca: extracted.modelo_cobranca,
       valor_entrada: extracted.valor_entrada,
       percentual_exito: extracted.percentual_exito
@@ -963,10 +984,16 @@ export async function readDriveFile(
     });
 
     const newId = crypto.randomUUID();
+    // safe.cpf_cnpj já passou por sanitizeValue, que só deixa passar CPF/CNPJ
+    // com dígito verificador válido e guarda só os dígitos — 14 dígitos é
+    // CNPJ (PJ), 11 é CPF (PF). Sem essa inferência, todo cliente virava "PF"
+    // fixo, mesmo quando o documento claramente era de uma empresa (CNPJ,
+    // nome fantasia extraído etc.).
+    const tipoPessoa = safe.cpf_cnpj && safe.cpf_cnpj.length === 14 ? "PJ" : "PF";
     const { error } = await getSupabaseServiceClient().from("clientes").insert({
       id: newId,
       nome: displayName,
-      tipo: "PF",
+      tipo: tipoPessoa,
       status: dbStatus,
       cpf_cnpj: safe.cpf_cnpj ?? "",
       rg_ie: safe.rg_ie ?? "",
@@ -1093,7 +1120,7 @@ export async function readDriveFile(
       const processId = await ensureProcessoFromClienteFile(clientId, extracted, docType);
       if (processId) {
         result.processId = processId;
-        const processFieldNames = ["numero_cnj", "tipo_acao", "parte_contraria", "vara_comarca", "data_protocolo", "modelo_cobranca", "valor_entrada", "percentual_exito"];
+        const processFieldNames = ["numero_cnj", "tipo_acao", "parte_contraria", "vara_comarca", "localizacao", "data_protocolo", "data_encerramento", "modelo_cobranca", "valor_entrada", "percentual_exito"];
         result.fieldsExtracted = [
           ...result.fieldsExtracted,
           ...processFieldNames.filter((k) => extracted[k])
@@ -1130,7 +1157,9 @@ async function ensureProcessoFromClienteFile(
     tipo_acao: tipoAcao,
     parte_contraria: extracted.parte_contraria,
     vara_comarca: extracted.vara_comarca,
+    localizacao: extracted.localizacao,
     data_protocolo: extracted.data_protocolo,
+    data_encerramento: extracted.data_encerramento,
     modelo_cobranca: modeloCobranca,
     valor_entrada: extracted.valor_entrada,
     percentual_exito: extracted.percentual_exito
@@ -1185,8 +1214,10 @@ async function ensureProcessoFromClienteFile(
     tipo_acao: safeProc.tipo_acao ?? null,
     parte_contraria: safeProc.parte_contraria ?? null,
     vara_comarca: safeProc.vara_comarca ?? null,
+    localizacao: safeProc.localizacao ?? null,
     data_cadastro: hojeLocalISO(),
     data_protocolo: safeProc.data_protocolo ?? null,
+    data_encerramento: safeProc.data_encerramento ?? null,
     modelo_cobranca: safeProc.modelo_cobranca ?? null,
     valor_entrada: safeProc.valor_entrada ? parseMoneyToNumber(safeProc.valor_entrada) : null,
     percentual_exito: safeProc.percentual_exito
