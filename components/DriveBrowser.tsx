@@ -158,11 +158,14 @@ function DriveFileRow({ file, isDeleting, onNavigate, onDelete }: DriveFileRowPr
   );
 }
 
-function UploadTimeline({ steps }: { steps: UploadStep[] }) {
+type CurrentFile = { index: number; total: number; name: string };
+
+function UploadTimeline({ steps, currentFile }: { steps: UploadStep[]; currentFile: CurrentFile | null }) {
   return (
     <div className="mx-5 mt-4 rounded-md border border-slate-200 bg-slate-50 px-4 py-3">
       <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
         Processamento do robô
+        {currentFile && ` — arquivo ${currentFile.index}/${currentFile.total}: ${currentFile.name}`}
       </p>
       <ul className="space-y-1.5">
         {steps.map((step) => (
@@ -230,7 +233,7 @@ export function DriveBrowser({
     onError: setError
   });
 
-  const { isUploading, openFilePicker, uploadFile, fileInputRef, steps } = useGoogleDriveUpload();
+  const { isUploading, currentFile, openFilePicker, uploadFiles, fileInputRef, steps } = useGoogleDriveUpload();
 
   useEffect(() => {
     if (navError) setError(navError);
@@ -291,17 +294,23 @@ export function DriveBrowser({
                 ? <Loader2 size={15} className="animate-spin" />
                 : <Upload size={15} />
               }
-              {isUploading ? "Enviando..." : "Upload Arquivo"}
+              {isUploading
+                ? currentFile
+                  ? `Enviando ${currentFile.index}/${currentFile.total}...`
+                  : "Enviando..."
+                : "Upload Arquivo"
+              }
             </button>
             <input
               ref={fileInputRef}
               type="file"
+              multiple
               className="hidden"
               onChange={(e) => {
-                const file = e.target.files?.[0];
-                if (file) {
-                  uploadFile(
-                    file,
+                const files = e.target.files;
+                if (files && files.length > 0) {
+                  uploadFiles(
+                    files,
                     currentFolderId,
                     (msg) => { refresh(); setError(null); setAiMessage(msg ?? null); },
                     setError
@@ -348,7 +357,7 @@ export function DriveBrowser({
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {steps.length > 0 && <UploadTimeline steps={steps} />}
+          {steps.length > 0 && <UploadTimeline steps={steps} currentFile={currentFile} />}
           {error && (
             <div className="mx-5 mt-4 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600">
               {error}

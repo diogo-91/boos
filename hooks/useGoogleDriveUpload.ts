@@ -29,6 +29,7 @@ function initialSteps(): UploadStep[] {
 export function useGoogleDriveUpload() {
   const [isUploading, setIsUploading] = useState(false);
   const [steps, setSteps] = useState<UploadStep[]>([]);
+  const [currentFile, setCurrentFile] = useState<{ index: number; total: number; name: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const updateStep = useCallback((id: UploadStepId, status: UploadStepStatus, message?: string) => {
@@ -39,9 +40,8 @@ export function useGoogleDriveUpload() {
     fileInputRef.current?.click();
   }, []);
 
-  const uploadFile = useCallback(
-    async (file: File, folderId: string, onDone: (msg?: string) => void, onError: (msg: string) => void) => {
-      setIsUploading(true);
+  const uploadSingleFile = useCallback(
+    async (file: File, folderId: string): Promise<string> => {
       setSteps(initialSteps());
       updateStep("upload", "active");
       try {
@@ -60,23 +60,71 @@ export function useGoogleDriveUpload() {
         }
 
         updateStep("upload", "done");
-        await notifyReadFile(data.file.id, data.file.name ?? file.name, folderId, onDone, updateStep);
+        const message = await notifyReadFile(data.file.id, data.file.name ?? file.name, folderId, updateStep);
         setSteps((prev) => prev.map((s) => (s.status === "pending" ? { ...s, status: "skip" } : s)));
+        return message;
       } catch (err) {
-        updateStep("upload", "error", err instanceof Error ? err.message : "Erro no upload.");
-        onError(err instanceof Error ? err.message : "Erro no upload.");
-      } finally {
-        setIsUploading(false);
-        if (fileInputRef.current) fileInputRef.current.value = "";
+        const message = err instanceof Error ? err.message : "Erro no upload.";
+        updateStep("upload", "error", message);
+        throw new Error(message);
       }
     },
     [updateStep]
   );
 
+  // Processa em sequência, um arquivo de cada vez — evita disparar várias
+  // requisições simultâneas pra IA e permite acompanhar o progresso de cada
+  // arquivo individualmente na mesma timeline.
+  const uploadFiles = useCallback(
+    async (
+      files: FileList | File[],
+      folderId: string,
+      onDone: (msg?: string) => void,
+      onError: (msg: string) => void
+    ) => {
+      const list = Array.from(files);
+      if (list.length === 0) return;
+
+      setIsUploading(true);
+      const results: string[] = [];
+      const errors: string[] = [];
+
+      try {
+        for (let i = 0; i < list.length; i++) {
+          const file = list[i];
+          setCurrentFile({ index: i + 1, total: list.length, name: file.name });
+          try {
+            const message = await uploadSingleFile(file, folderId);
+            results.push(`${file.name}: ${message}`);
+          } catch (err) {
+            const message = err instanceof Error ? err.message : "Erro no upload.";
+            errors.push(`${file.name}: ${message}`);
+          }
+        }
+
+        if (list.length === 1) {
+          if (errors.length > 0) onError(errors[0]);
+          else onDone(results[0]);
+        } else {
+          const summary = `${results.length} de ${list.length} arquivo(s) processado(s) com sucesso.${
+            errors.length > 0 ? ` ${errors.length} com erro.` : ""
+          }`;
+          onDone(summary);
+        }
+      } finally {
+        setIsUploading(false);
+        setCurrentFile(null);
+        if (fileInputRef.current) fileInputRef.current.value = "";
+      }
+    },
+    [uploadSingleFile]
+  );
+
   return {
     isUploading,
+    currentFile,
     openFilePicker,
-    uploadFile,
+    uploadFiles,
     fileInputRef,
     steps
   };
@@ -94,9 +142,8 @@ async function notifyReadFile(
   fileId: string,
   fileName: string,
   folderId: string,
-  onDone: (msg?: string) => void,
   updateStep: (id: UploadStepId, status: UploadStepStatus, message?: string) => void
-) {
+): Promise<string> {
   try {
     const resp = await fetch("/api/drive/read-file", {
       method: "POST",
@@ -105,8 +152,7 @@ async function notifyReadFile(
     });
 
     if (!resp.body) {
-      onDone("Arquivo enviado.");
-      return;
+      return "Arquivo enviado.";
     }
 
     const reader = resp.body.getReader();
@@ -144,18 +190,12 @@ async function notifyReadFile(
       }
     }
 
-    if (!result) {
-      onDone("Arquivo enviado.");
-    } else if (result.skipped) {
-      onDone(`Arquivo enviado. Leitura ignorada: ${result.skipReason ?? "tipo não suportado"}`);
-    } else if (result.fieldsExtracted?.length) {
-      onDone(`Arquivo enviado e lido pela IA. Campos preenchidos: ${result.fieldsExtracted.join(", ")}`);
-    } else if (result.error) {
-      onDone(`Arquivo enviado. Erro na leitura: ${result.error}`);
-    } else {
-      onDone("Arquivo enviado. Nenhum campo extraído.");
-    }
+    if (!result) return "Arquivo enviado.";
+    if (result.skipped) return `Arquivo enviado. Leitura ignorada: ${result.skipReason ?? "tipo não suportado"}`;
+    if (result.fieldsExtracted?.length) return `Arquivo enviado e lido pela IA. Campos preenchidos: ${result.fieldsExtracted.join(", ")}`;
+    if (result.error) return `Arquivo enviado. Erro na leitura: ${result.error}`;
+    return "Arquivo enviado. Nenhum campo extraído.";
   } catch {
-    onDone("Arquivo enviado.");
+    return "Arquivo enviado.";
   }
 }
