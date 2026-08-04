@@ -185,6 +185,12 @@ async function extractDocumentFields(
   documentType: DocumentType,
   fileName: string
 ): Promise<Record<string, string>> {
+  // Sem isso, a IA tendia a escanear só a primeira ocorrência óbvia de cada
+  // campo e ignorar variações de redação — ex: estado civil escrito como
+  // "casada com Fulano" na qualificação das partes, em vez de num campo
+  // isolado "Estado civil: Casado", saía como null mesmo estando no texto.
+  const THOROUGHNESS_INSTRUCTION = `REGRA DE LEITURA: Leia o documento INTEIRO com atenção antes de responder — não pule páginas, rodapés, cabeçalhos, assinaturas ou trechos de letra pequena. Dados como estado civil, endereço, RG, CPF e telefone costumam aparecer dentro da qualificação das partes (geralmente um parágrafo corrido logo após o nome, não um campo isolado com rótulo) e podem estar redigidos de formas diferentes — por exemplo, estado civil pode aparecer como "casado(a)", "casada com [nome]", "convivente em união estável", "solteiro(a)", "viúvo(a) de [nome]", sem a palavra exata do rótulo do campo. Antes de retornar null para qualquer campo, releia mentalmente o documento procurando especificamente por esse dado sob essas variações. Só retorne null se, depois dessa checagem cuidadosa, o dado realmente não constar em lugar nenhum do documento.`;
+
   const NULL_INSTRUCTION = `REGRA OBRIGATÓRIA: Para qualquer campo não encontrado claramente no documento, retorne null. NUNCA retorne strings como "não informado", "não disponível", "N/A", "não identificado", "desconhecido", "-" ou qualquer texto que indique ausência de dado. Se não encontrou, retorne null.`;
 
   // Documentos de propriedade (IPTU, matrícula etc.) costumam registrar o
@@ -208,6 +214,7 @@ Extraia e retorne APENAS um objeto JSON com os campos encontrados:
   "telefone": "telefone com DDD no formato (00) 00000-0000, ou null",
   "nome_fantasia": "nome fantasia se for CNPJ, ou null"
 }
+${THOROUGHNESS_INSTRUCTION}
 ${NULL_INSTRUCTION}
 ${NAME_INSTRUCTION}
 Retorne SOMENTE o JSON, sem texto adicional.`,
@@ -225,6 +232,7 @@ Extraia e retorne APENAS um objeto JSON com os dados do OUTORGANTE (cliente que 
   "email": "e-mail do outorgante, ou null",
   "data_nascimento_abertura": "data de nascimento no formato AAAA-MM-DD, ou null"
 }
+${THOROUGHNESS_INSTRUCTION}
 ${NULL_INSTRUCTION}
 ${NAME_INSTRUCTION}
 Retorne SOMENTE o JSON, sem texto adicional.`,
@@ -242,6 +250,7 @@ Extraia e retorne APENAS um objeto JSON:
   "email": "e-mail do cliente, ou null",
   "endereco": "endereço completo do cliente, ou null"
 }
+${THOROUGHNESS_INSTRUCTION}
 ${NULL_INSTRUCTION}
 ${NAME_INSTRUCTION}
 Retorne SOMENTE o JSON, sem texto adicional.`,
@@ -261,6 +270,7 @@ Extraia e retorne APENAS um objeto JSON:
   "email": "e-mail do autor/cliente, ou null",
   "endereco": "endereço completo do autor/cliente, ou null"
 }
+${THOROUGHNESS_INSTRUCTION}
 ${NULL_INSTRUCTION}
 ${NAME_INSTRUCTION}
 Retorne SOMENTE o JSON, sem texto adicional.`,
@@ -273,6 +283,7 @@ Retorne APENAS um objeto JSON com os campos que conseguir identificar com certez
   "cpf_cnpj": "CPF/CNPJ, ou null",
   "cpf_cnpj_citacao": "copie aqui, literalmente, o trecho exato do documento onde você leu esse CPF/CNPJ, ou null"
 }
+${THOROUGHNESS_INSTRUCTION}
 ${NULL_INSTRUCTION}
 ${NAME_INSTRUCTION}
 Retorne SOMENTE o JSON, sem texto adicional.`
