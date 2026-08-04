@@ -91,6 +91,7 @@ export function makeProcess(values: ProcessFormValues): LegalProcess {
     court: values.court,
     filingDate: formatInputDate(values.filingDate),
     closingDate: formatInputDate(values.closingDate),
+    registrationDate: formatTodayBR(),
     duration: "—",
     entryValue: values.entryValue || "R$ 0,00",
     successFee: values.successFee || "—",

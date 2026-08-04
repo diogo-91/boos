@@ -1021,6 +1021,7 @@ async function ensureProcessoFromClienteFile(
     tipo_acao: safeProc.tipo_acao ?? null,
     parte_contraria: safeProc.parte_contraria ?? null,
     vara_comarca: safeProc.vara_comarca ?? null,
+    data_cadastro: hojeLocalISO(),
     data_protocolo: safeProc.data_protocolo ?? null,
     modelo_cobranca: safeProc.modelo_cobranca ?? null,
     valor_entrada: safeProc.valor_entrada ? parseMoneyToNumber(safeProc.valor_entrada) : null,

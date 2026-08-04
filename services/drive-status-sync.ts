@@ -159,6 +159,7 @@ export async function createProcessoFromFolder(
     numero_cnj: number,
     tipo_acao: actionType || null,
     status: "em_andamento",
+    data_cadastro: hojeLocalISO(),
     drive_folder_id: folderId,
     drive_path: `${clienteDrivePath} › ${folderName}`
   });

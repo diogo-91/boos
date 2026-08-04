@@ -66,6 +66,7 @@ export type LegalProcess = {
   court: string;
   filingDate: string;
   closingDate: string;
+  registrationDate: string;
   duration: string;
   entryValue: string;
   successFee: string;

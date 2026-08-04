@@ -240,6 +240,7 @@ export function mapProcessoFromDb(row: AnyRecord): LegalProcess {
     court: asString(row.vara_comarca, ""),
     filingDate: asDisplayDate(row.data_protocolo),
     closingDate: asDisplayDate(row.data_encerramento),
+    registrationDate: asDisplayDate(row.data_cadastro),
     duration: asString(row.duracao, "—"),
     entryValue:
       row.valor_entrada === null || row.valor_entrada === undefined || Number(row.valor_entrada) === 0
@@ -267,6 +268,7 @@ export function mapProcessoToDb(process: LegalProcess, includeId = true) {
     vara_comarca: process.court || null,
     data_protocolo: asDbDate(process.filingDate),
     data_encerramento: asDbDate(process.closingDate),
+    data_cadastro: asDbDate(process.registrationDate),
     modelo_cobranca: process.billingModel || null,
     valor_entrada: parseMoneyToNumber(process.entryValue),
     percentual_exito: parsePercentToNumber(process.successFee),

@@ -157,12 +157,17 @@ export function DashboardView() {
     const comDrive = clients.filter(c => c.driveFolderId).length;
 
     // ── Processos recentes ──────────────────────────────────────────────────
-    // listarProcessos ordena por numero_cnj (alfabético) — a tabela processos
-    // não tem coluna de data de criação, então não dá pra ordenar por "mais
-    // recente" de verdade sem uma migration. slice(-8).reverse() sobre uma
-    // lista alfabética é só os últimos por ordem de CNJ, não os mais novos —
-    // mantido como aproximação conhecida até essa coluna existir.
-    const recentProcesses = [...processes].slice(-8).reverse();
+    // processos ganhou data_cadastro (migration 2026-08-04) — processos
+    // criados antes da migration não têm esse valor preenchido e caem pro
+    // fim da lista (data desconhecida), mas tudo criado a partir de agora
+    // ordena certo por data real em vez da aproximação alfabética por CNJ.
+    const recentProcesses = [...processes]
+      .sort((a, b) => {
+        const dateA = parseBRDate(a.registrationDate)?.getTime() ?? 0;
+        const dateB = parseBRDate(b.registrationDate)?.getTime() ?? 0;
+        return dateB - dateA;
+      })
+      .slice(0, 8);
 
     // ── Clientes recentes ─────────────────────────────────────────────────────
     // clientes tem data_cadastro — ordena por ela de verdade em vez do
