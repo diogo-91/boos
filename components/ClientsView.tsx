@@ -81,12 +81,6 @@ export function ClientsView() {
         <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-3">
           <SearchInput value={search} onChange={setSearch} />
           <div className="flex shrink-0 flex-wrap gap-2">
-            <Button onClick={() => setIsClientModalOpen(true)}>
-              + Cliente
-            </Button>
-            <Button variant="secondary" onClick={() => setIsProcessModalOpen(true)}>
-              + Processo
-            </Button>
             {DRIVE_ROOT_FOLDER_ID && (
               <Button variant="secondary" onClick={() => setIsDriveBrowserOpen(true)}>
                 <span className="mr-2 flex h-4 w-4 items-center justify-center">
