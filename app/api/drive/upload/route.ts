@@ -6,8 +6,15 @@ import path from "path";
 function sanitizeFileName(name: string): string {
   // Pega só o nome base — remove qualquer path traversal (ex: ../../config.json)
   const base = path.basename(name);
-  // Remove caracteres perigosos, mantém letras, números, espaço, ponto, hífen e underscore
-  const safe = base.replace(/[^\w\s.\-]/g, "_").trim();
+  // Antes era uma lista branca baseada em \w (ASCII-only) — "ç", "ã", "á"
+  // etc. viravam "_", quebrando o nome exibido E a detecção de tipo de
+  // documento por palavra-chave (ex: "Procuração.pdf" virava "Procura__o.pdf"
+  // e nunca mais batia com "procuração" em services/ai-document-reader.ts).
+  // \p{L}/\p{N} (Unicode) resolveria, mas exige regex flag "u", que o
+  // target es5 do tsconfig não aceita. Em vez disso, bloqueia só os
+  // caracteres realmente inválidos em nome de arquivo (Windows + path
+  // traversal) e deixa passar acentos e demais pontuação.
+  const safe = base.replace(/[<>:"/\\|?*\x00-\x1f]/g, "_").trim();
   // Garante que não ficou vazio após sanitização
   return safe || "arquivo";
 }
