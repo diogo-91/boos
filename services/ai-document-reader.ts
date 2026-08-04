@@ -292,13 +292,33 @@ ${NULL_INSTRUCTION}
 ${NAME_INSTRUCTION}
 Retorne SOMENTE o JSON, sem texto adicional.`,
 
+    // Cobre qualquer peça processual avulsa que não seja procuração,
+    // documento pessoal, petição inicial nem contrato de honorários —
+    // contrarrazões, cumprimento de sentença, impugnação, expedição de
+    // RPV, resposta a impugnação, declaração de hipossuficiência etc. Pede
+    // TODOS os campos que o sistema sabe guardar (não só numero_cnj/nome/
+    // cpf), porque qualquer uma dessas peças pode citar número do processo,
+    // parte contrária, vara/comarca ou valores — sem isso essas peças
+    // caíam aqui e nada delas era aproveitado.
     outro: `Analise este documento jurídico e extraia qualquer informação relevante sobre o cliente ou processo.
 Retorne APENAS um objeto JSON com os campos que conseguir identificar com certeza:
 {
-  "numero_cnj": "número CNJ exato no formato 0000000-00.0000.0.00.0000, ou null",
+  "numero_cnj": "número do processo EXATAMENTE no formato CNJ: 0000000-00.0000.0.00.0000 — se não encontrar esse padrão exato, retorne null",
+  "tipo_acao": "tipo/natureza da ação (ex: Acidente de trabalho, Indenização por danos morais), ou null",
+  "parte_contraria": "nome da parte contrária (réu/reclamado), ou null",
+  "vara_comarca": "vara e comarca onde tramita, ou null",
+  "data_protocolo": "data de protocolo/distribuição citada no documento, no formato AAAA-MM-DD, ou null",
+  "modelo_cobranca": "um de: Indefinido / Entrada / Êxito / Entrada + Êxito / Recorrente, ou null",
+  "valor_entrada": "valor de entrada em formato R$ 0.000,00, ou null",
+  "percentual_exito": "porcentagem de êxito como número apenas (ex: 20), ou null",
   "nome": "nome do cliente, ou null",
   "cpf_cnpj": "CPF/CNPJ, ou null",
-  "cpf_cnpj_citacao": "copie aqui, literalmente, o trecho exato do documento onde você leu esse CPF/CNPJ, ou null"
+  "cpf_cnpj_citacao": "copie aqui, literalmente, o trecho exato do documento onde você leu esse CPF/CNPJ, ou null",
+  "rg_ie": "número do RG ou Inscrição Estadual, ou null",
+  "estado_civil": "estado civil se disponível (ex: Solteiro, Casado, Divorciado, Viúvo), ou null",
+  "endereco": "endereço completo, ou null",
+  "telefone": "telefone com DDD, ou null",
+  "email": "e-mail, ou null"
 }
 ${THOROUGHNESS_INSTRUCTION}
 ${NULL_INSTRUCTION}
@@ -800,22 +820,26 @@ export async function readDriveFile(
   if (result.processId) {
     emit("match", "done", "Processo já vinculado a esta pasta");
     emit("save", "active", "Salvando dados no processo");
-    if (docType === "contrato_honorarios" || docType === "documento_inicial") {
-      const processFields: ExtractedProcessFields = {
-        numero_cnj: extracted.numero_cnj,
-        tipo_acao: extracted.tipo_acao,
-        parte_contraria: extracted.parte_contraria,
-        vara_comarca: extracted.vara_comarca,
-        data_protocolo: extracted.data_protocolo,
-        modelo_cobranca: extracted.modelo_cobranca,
-        valor_entrada: extracted.valor_entrada,
-        percentual_exito: extracted.percentual_exito
-      };
-      await updateProcessFields(result.processId, processFields);
-      result.fieldsExtracted = Object.keys(processFields).filter(
-        (k) => processFields[k as keyof ExtractedProcessFields]
-      );
-    }
+    // Antes só rodava para contrato_honorarios/documento_inicial — qualquer
+    // outra peça (contrarrazões, cumprimento de sentença, impugnação,
+    // expedição de RPV etc.) caía como "outro" e era marcada como lida sem
+    // salvar nada, mesmo tendo campos do processo no texto. updateProcessFields
+    // já ignora campos vazios, então rodar sempre é seguro mesmo se a IA não
+    // achar nenhum dado extra num documento_pessoal/procuração perdido aqui.
+    const processFields: ExtractedProcessFields = {
+      numero_cnj: extracted.numero_cnj,
+      tipo_acao: extracted.tipo_acao,
+      parte_contraria: extracted.parte_contraria,
+      vara_comarca: extracted.vara_comarca,
+      data_protocolo: extracted.data_protocolo,
+      modelo_cobranca: extracted.modelo_cobranca,
+      valor_entrada: extracted.valor_entrada,
+      percentual_exito: extracted.percentual_exito
+    };
+    await updateProcessFields(result.processId, processFields);
+    result.fieldsExtracted = Object.keys(processFields).filter(
+      (k) => processFields[k as keyof ExtractedProcessFields]
+    );
     emit("save", "done", `${result.fieldsExtracted.length} campo(s) salvo(s)`);
     return result;
   }
@@ -1005,8 +1029,13 @@ export async function readDriveFile(
       (k) => clientFields[k as keyof ExtractedClientFields]
     );
 
-    // Arquivo solto na pasta do cliente com dados de processo → cria/atualiza processo
-    if (docType === "documento_inicial" || docType === "contrato_honorarios") {
+    // Arquivo solto na pasta do cliente com dados de processo → cria/atualiza processo.
+    // Inclui "outro" porque uma peça avulsa (contrarrazões, cumprimento de
+    // sentença etc.) pode citar o número CNJ e precisa achar/atualizar o
+    // processo certo — ensureProcessoFromClienteFile só CRIA processo novo
+    // para documento_inicial (ver função), então incluir "outro" aqui não
+    // arrisca criar processo a partir de um documento qualquer.
+    if (docType === "documento_inicial" || docType === "contrato_honorarios" || docType === "outro") {
       const processId = await ensureProcessoFromClienteFile(clientId, extracted, docType);
       if (processId) {
         result.processId = processId;
