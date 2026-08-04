@@ -187,6 +187,13 @@ async function extractDocumentFields(
 ): Promise<Record<string, string>> {
   const NULL_INSTRUCTION = `REGRA OBRIGATÓRIA: Para qualquer campo não encontrado claramente no documento, retorne null. NUNCA retorne strings como "não informado", "não disponível", "N/A", "não identificado", "desconhecido", "-" ou qualquer texto que indique ausência de dado. Se não encontrou, retorne null.`;
 
+  // Documentos de propriedade (IPTU, matrícula etc.) costumam registrar o
+  // imóvel em nome de "FULANA E SEU MARIDO" — sem esta regra a IA copiava
+  // essa frase literal pro campo "nome", e como cada documento novo
+  // sobrescreve o nome do cliente já cadastrado, um IPTU processado por
+  // último acabava sujando o nome de um cadastro que já estava correto.
+  const NAME_INSTRUCTION = `REGRA PARA NOME: Se o documento mencionar o titular junto com cônjuge ou terceiros (ex: "FULANA E SEU MARIDO", "FULANO E SUA ESPOSA", "FULANA E OUTROS"), retorne no campo de nome apenas o nome da pessoa titular do documento/pasta em análise — nunca inclua cônjuge, marido, esposa ou terceiros junto no mesmo campo.`;
+
   const prompts: Record<DocumentType, string> = {
     documento_pessoal: `Analise este documento (pode ser RG, CNH, CPF, cartão CNPJ ou contrato social).
 Extraia e retorne APENAS um objeto JSON com os campos encontrados:
@@ -202,6 +209,7 @@ Extraia e retorne APENAS um objeto JSON com os campos encontrados:
   "nome_fantasia": "nome fantasia se for CNPJ, ou null"
 }
 ${NULL_INSTRUCTION}
+${NAME_INSTRUCTION}
 Retorne SOMENTE o JSON, sem texto adicional.`,
 
     procuracao: `Analise esta procuração.
@@ -218,6 +226,7 @@ Extraia e retorne APENAS um objeto JSON com os dados do OUTORGANTE (cliente que 
   "data_nascimento_abertura": "data de nascimento no formato AAAA-MM-DD, ou null"
 }
 ${NULL_INSTRUCTION}
+${NAME_INSTRUCTION}
 Retorne SOMENTE o JSON, sem texto adicional.`,
 
     contrato_honorarios: `Analise este contrato de honorários advocatícios.
@@ -234,6 +243,7 @@ Extraia e retorne APENAS um objeto JSON:
   "endereco": "endereço completo do cliente, ou null"
 }
 ${NULL_INSTRUCTION}
+${NAME_INSTRUCTION}
 Retorne SOMENTE o JSON, sem texto adicional.`,
 
     documento_inicial: `Analise este documento de petição inicial ou protocolo processual.
@@ -252,6 +262,7 @@ Extraia e retorne APENAS um objeto JSON:
   "endereco": "endereço completo do autor/cliente, ou null"
 }
 ${NULL_INSTRUCTION}
+${NAME_INSTRUCTION}
 Retorne SOMENTE o JSON, sem texto adicional.`,
 
     outro: `Analise este documento jurídico e extraia qualquer informação relevante sobre o cliente ou processo.
@@ -263,6 +274,7 @@ Retorne APENAS um objeto JSON com os campos que conseguir identificar com certez
   "cpf_cnpj_citacao": "copie aqui, literalmente, o trecho exato do documento onde você leu esse CPF/CNPJ, ou null"
 }
 ${NULL_INSTRUCTION}
+${NAME_INSTRUCTION}
 Retorne SOMENTE o JSON, sem texto adicional.`
   };
 
