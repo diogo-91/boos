@@ -24,10 +24,23 @@ export async function POST(request: Request) {
 
   const encoder = new TextEncoder();
 
+  // Se o cliente fecha a aba/modal no meio do processamento, o runtime
+  // chama cancel() — mas readDriveFile continua rodando em background e
+  // tentando mandar progresso pra uma conexão que já não existe mais. Sem
+  // essa flag compartilhada entre start() e cancel(), cada enqueue/close
+  // depois disso lançava "Invalid state: Controller is already closed",
+  // virando um erro no log pra algo que nem é um erro de verdade.
+  let closed = false;
+
   const stream = new ReadableStream({
     async start(controller) {
       const send = (event: Record<string, unknown>) => {
-        controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        if (closed) return;
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        } catch {
+          closed = true;
+        }
       };
 
       try {
@@ -39,8 +52,20 @@ export async function POST(request: Request) {
         console.error("[ReadFile] Erro:", err);
         send({ type: "result", ok: false, error: "Não foi possível processar o arquivo." });
       } finally {
-        controller.close();
+        if (!closed) {
+          closed = true;
+          try {
+            controller.close();
+          } catch {
+            // Já fechado pelo lado do cliente — nada a fazer.
+          }
+        }
       }
+    },
+    cancel() {
+      // Cliente desconectou (fechou aba/modal) — marca fechado pra
+      // qualquer send() ou controller.close() seguinte virar no-op.
+      closed = true;
     }
   });
 
