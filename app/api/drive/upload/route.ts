@@ -47,12 +47,24 @@ export async function POST(request: Request) {
     );
   }
 
-  const ALLOWED_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/gif"];
+  // .doc/.docx liberados porque services/ai-document-reader.ts já sabe ler
+  // os dois (mammoth para .docx, word-extractor para .doc) — não fazia
+  // sentido bloquear no upload um tipo que o robô processa normalmente
+  // depois, e boa parte das petições/peças chega nesse formato.
+  const ALLOWED_TYPES = [
+    "application/pdf",
+    "image/jpeg",
+    "image/png",
+    "image/webp",
+    "image/gif",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "application/msword"
+  ];
   const MAX_SIZE_BYTES = 20 * 1024 * 1024; // 20MB
 
   if (!ALLOWED_TYPES.includes(file.type)) {
     return NextResponse.json(
-      { message: `Tipo de arquivo não permitido: ${file.type}. Envie PDF ou imagem (JPG, PNG, WEBP).` },
+      { message: `Tipo de arquivo não permitido: ${file.type}. Envie PDF, imagem (JPG, PNG, WEBP) ou Word (.doc/.docx).` },
       { status: 400 }
     );
   }
