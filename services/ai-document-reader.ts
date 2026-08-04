@@ -47,6 +47,13 @@ export type DocumentType =
   | "documento_inicial"
   | "outro";
 
+// Únicos tipos de documento cuja finalidade é justamente qualificar a
+// pessoa — têm prioridade pra corrigir/preencher os campos de qualificação
+// do cliente. Qualquer outro tipo só preenche o que ainda está vazio (ver
+// uso em readDriveFile).
+const PRIORITY_ID_DOCS = new Set<DocumentType>(["procuracao", "documento_pessoal"]);
+const QUALIFICATION_FIELDS = ["nome", "estado_civil", "endereco", "rg_ie", "data_nascimento_abertura"] as const;
+
 function detectDocumentType(fileName: string, folderPath: string): DocumentType {
   const name = fileName.toLowerCase();
   const path = folderPath.toLowerCase();
@@ -200,6 +207,15 @@ async function extractDocumentFields(
   // último acabava sujando o nome de um cadastro que já estava correto.
   const NAME_INSTRUCTION = `REGRA PARA NOME: Se o documento mencionar o titular junto com cônjuge ou terceiros (ex: "FULANA E SEU MARIDO", "FULANO E SUA ESPOSA", "FULANA E OUTROS"), retorne no campo de nome apenas o nome da pessoa titular do documento/pasta em análise — nunca inclua cônjuge, marido, esposa ou terceiros junto no mesmo campo.`;
 
+  // A procuração normalmente traz a qualificação completa da parte (nome,
+  // estado civil, endereço, RG) redigida pelo próprio advogado — é a fonte
+  // mais confiável dessas informações, mais do que um RG (que não tem
+  // endereço/estado civil) ou um documento avulso como IPTU (que não é
+  // sobre a pessoa, e sim sobre um imóvel). Só a IA lendo a procuração sabe
+  // disso — o pipeline reforça essa prioridade não deixando doc tipo
+  // "outro" sobrescrever campo já preenchido (ver PRIORITY_ID_DOCS abaixo).
+  const PROCURACAO_PRIORITY_INSTRUCTION = `PRIORIDADE: Este documento é uma procuração — normalmente é a fonte mais completa e confiável da qualificação da parte (nome completo, estado civil, endereço, RG). Dedique atenção máxima a extrair esses campos de qualificação com precisão e completude, pois eles serão usados para preencher ou corrigir o cadastro do cliente.`;
+
   const prompts: Record<DocumentType, string> = {
     documento_pessoal: `Analise este documento (pode ser RG, CNH, CPF, cartão CNPJ ou contrato social).
 Extraia e retorne APENAS um objeto JSON com os campos encontrados:
@@ -232,6 +248,7 @@ Extraia e retorne APENAS um objeto JSON com os dados do OUTORGANTE (cliente que 
   "email": "e-mail do outorgante, ou null",
   "data_nascimento_abertura": "data de nascimento no formato AAAA-MM-DD, ou null"
 }
+${PROCURACAO_PRIORITY_INSTRUCTION}
 ${THOROUGHNESS_INSTRUCTION}
 ${NULL_INSTRUCTION}
 ${NAME_INSTRUCTION}
@@ -965,6 +982,24 @@ export async function readDriveFile(
       telefone: extracted.telefone,
       email: extracted.email
     };
+
+    // Procuração e documento pessoal são a fonte confiável da qualificação
+    // da parte — podem corrigir o que já está cadastrado. Qualquer outro
+    // tipo (IPTU, petição, contrato) não é sobre a qualificação da pessoa
+    // em si, então só preenche esses campos se ainda estiverem vazios,
+    // nunca sobrescreve um dado bom que já veio de um documento oficial.
+    if (!PRIORITY_ID_DOCS.has(docType)) {
+      const { data: current } = await getSupabaseServiceClient()
+        .from("clientes")
+        .select(QUALIFICATION_FIELDS.join(","))
+        .eq("id", clientId)
+        .maybeSingle<Record<(typeof QUALIFICATION_FIELDS)[number], string | null>>();
+
+      for (const field of QUALIFICATION_FIELDS) {
+        if (current?.[field]) delete clientFields[field];
+      }
+    }
+
     await updateClientFields(clientId, clientFields);
     result.fieldsExtracted = Object.keys(clientFields).filter(
       (k) => clientFields[k as keyof ExtractedClientFields]
