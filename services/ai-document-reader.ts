@@ -1,4 +1,4 @@
-import Anthropic from "@anthropic-ai/sdk";
+import { GoogleGenAI } from "@google/genai";
 import mammoth from "mammoth";
 import { getGoogleDriveClient, getGoogleDriveRootFolderId } from "@/lib/google/drive";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
@@ -12,7 +12,8 @@ import { normalizeDocument, isValidCpfCnpj } from "@/lib/validation";
 import { hojeLocalISO } from "@/lib/date-utils";
 import { parseMoneyToNumber } from "@/services/mappers";
 
-const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
+const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
+const GEMINI_MODEL = "gemini-2.5-flash";
 
 export type ExtractedClientFields = {
   nome?: string;
@@ -174,7 +175,7 @@ async function downloadFileFromDrive(fileId: string): Promise<{ content: string;
   return { content: Buffer.from(text).toString("base64"), mimeType: "text/plain" };
 }
 
-async function extractWithClaude(
+async function extractDocumentFields(
   base64Content: string,
   mimeType: string,
   documentType: DocumentType,
@@ -267,30 +268,29 @@ Retorne SOMENTE o JSON, sem texto adicional.`
 
   if (!isImage && !isPdf && !isText) return {};
 
-  // Para texto puro (extraído de .docx via mammoth), manda como texto direto
-  const content: Array<Anthropic.Messages.ContentBlockParam> = isText
-    ? [{ type: "text", text: `Arquivo: ${fileName}\n\nConteúdo do documento:\n${Buffer.from(base64Content, "base64").toString("utf-8")}\n\n${prompts[documentType]}` }]
+  // Para texto puro (extraído de .docx via mammoth), manda como texto direto.
+  // Imagem/PDF vão como inlineData nativo — o Gemini lê os dois formatos
+  // pelo mesmo mecanismo, ao contrário do Claude que separava image/document.
+  const parts = isText
+    ? [{ text: `Arquivo: ${fileName}\n\nConteúdo do documento:\n${Buffer.from(base64Content, "base64").toString("utf-8")}\n\n${prompts[documentType]}` }]
     : [
-        isImage
-          ? {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: mimeType as Anthropic.Messages.Base64ImageSource["media_type"],
-                data: base64Content
-              }
-            }
-          : { type: "document", source: { type: "base64", media_type: "application/pdf", data: base64Content } },
-        { type: "text", text: `Arquivo: ${fileName}\n\n${prompts[documentType]}` }
+        { inlineData: { mimeType, data: base64Content } },
+        { text: `Arquivo: ${fileName}\n\n${prompts[documentType]}` }
       ];
 
-  const message = await anthropic.messages.create({
-    model: "claude-haiku-4-5-20251001",
-    max_tokens: 1024,
-    messages: [{ role: "user", content }]
+  const response = await genAI.models.generateContent({
+    model: GEMINI_MODEL,
+    contents: [{ role: "user", parts }],
+    config: {
+      maxOutputTokens: 1024,
+      // Modo JSON estruturado do Gemini — o modelo é forçado a responder só
+      // com JSON válido, o que já elimina boa parte dos casos de resposta em
+      // prosa/truncada que o regex abaixo existia pra pegar com o Claude.
+      responseMimeType: "application/json"
+    }
   });
 
-  const text = message.content[0].type === "text" ? message.content[0].text : "";
+  const text = response.text ?? "";
   const jsonMatch = text.match(/\{[\s\S]*\}/);
 
   // Resposta truncada (max_tokens), em prosa, ou recusa do modelo — antes
@@ -714,7 +714,7 @@ export async function readDriveFile(
   emit("ai", "active", "Lendo documento com IA");
   let extracted: Record<string, string>;
   try {
-    extracted = await extractWithClaude(fileData.content, fileData.mimeType, docType, fileName);
+    extracted = await extractDocumentFields(fileData.content, fileData.mimeType, docType, fileName);
   } catch (err) {
     // Não marca como processado — markFileProcessed só roda depois deste
     // ponto, então uma falha aqui já sai sem marcar nada, e a próxima

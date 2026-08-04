@@ -28,7 +28,7 @@ usuário, veja o [manual operacional](manual-operacional.md).
 
 Aplicação Next.js 16 (App Router) que roda como servidor Node. Não há backend
 separado: as rotas de API do próprio Next fazem a ponte com o Google Drive e com
-a API da Anthropic, enquanto o acesso ao PostgreSQL acontece via cliente Supabase
+a API do Gemini, enquanto o acesso ao PostgreSQL acontece via cliente Supabase
 tanto do navegador quanto do servidor.
 
 ```
@@ -44,8 +44,8 @@ tanto do navegador quanto do servidor.
         │                  └───┬──────────────┬───┘
         │                      │              │
 ┌───────▼──────────┐   ┌───────▼──────┐  ┌────▼─────────┐
-│    Supabase      │   │ Google Drive │  │  Anthropic   │
-│ PostgreSQL + Auth│   │  API v3      │  │  Messages    │
+│    Supabase      │   │ Google Drive │  │    Gemini    │
+│ PostgreSQL + Auth│   │  API v3      │  │ generateContent│
 └──────────────────┘   └──────────────┘  └──────────────┘
                               ▲
                        ┌──────┴───────┐
@@ -62,7 +62,7 @@ tanto do navegador quanto do servidor.
 | `@supabase/supabase-js` | Acesso ao PostgreSQL |
 | `@supabase/ssr` | Sessão via cookies no middleware e no servidor |
 | `googleapis` | Google Drive API v3 |
-| `@anthropic-ai/sdk` | Extração de dados de documentos |
+| `@google/genai` | Extração de dados de documentos (Gemini) |
 | `mammoth` | Texto de `.docx` e `.odt` |
 | `word-extractor` | Texto de `.doc` legado |
 | `lucide-react` | Ícones |
@@ -483,7 +483,7 @@ classifica o tipo de documento
         ↓
 baixa e extrai texto (ou manda binário)
         ↓
-extrai campos com Claude
+extrai campos com Gemini
         ↓
 sanitiza os valores
         ↓
@@ -530,12 +530,14 @@ Pelo pai e pelo avô da pasta:
 
 ### 5. Extração
 
-Modelo `claude-haiku-4-5-20251001`, `max_tokens` 1024, um prompt por tipo de
-documento pedindo JSON. Todos os prompts carregam a mesma instrução: **campo não
+Modelo `gemini-2.5-flash`, `maxOutputTokens` 1024, modo JSON estruturado
+(`responseMimeType: "application/json"`), um prompt por tipo de documento
+pedindo JSON. Todos os prompts carregam a mesma instrução: **campo não
 encontrado deve voltar `null`**, nunca `"não informado"`, `"N/A"` ou similar.
 
 A resposta é lida com regex de primeiro objeto JSON e `JSON.parse` protegido —
-resposta fora do formato vira objeto vazio, não exceção.
+resposta fora do formato lança erro (o arquivo não é marcado como processado,
+pra tentar de novo na próxima varredura em vez de ficar preso pra sempre).
 
 ### 6. Sanitização
 
@@ -671,7 +673,8 @@ no navegador** — nunca coloque segredo nelas.
 | `GOOGLE_DRIVE_ROOT_FOLDER_ID` | servidor | Raiz usada pelas rotinas |
 | `GOOGLE_SHEETS_ID` | servidor | Planilha de honorários |
 | `DRIVE_SYNC_SECRET` | servidor | Segredo das rotas de automação |
-| `ANTHROPIC_API_KEY` | servidor | Chave da API Anthropic |
+| `GEMINI_API_KEY` | servidor | Chave da API Gemini (Google AI Studio) |
+| `SUPABASE_SERVICE_ROLE_KEY` | servidor | Ignora RLS — só para rotas/serviços do Drive que rodam server-side |
 
 Sem as variáveis do Supabase a aplicação sobe em modo local. Sem as do Drive, as
 rotas respondem `503` com mensagem explicando a configuração ausente.
