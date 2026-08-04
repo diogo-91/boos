@@ -186,6 +186,47 @@ async function downloadFileFromDrive(fileId: string): Promise<{ content: string;
   return { content: Buffer.from(text).toString("base64"), mimeType: "text/plain" };
 }
 
+// Acha o primeiro objeto JSON balanceado a partir do primeiro "{" no texto,
+// contando profundidade de chaves e ignorando as que estão dentro de
+// strings (senão um endereço ou citação com "{"/"}" literal quebraria a
+// contagem). Se o texto termina com a raiz ainda aberta em 1 nível — caso
+// visto do Gemini reportando finishReason "STOP" mas esquecendo o "}"
+// final — fecha ela, já que o schema usado aqui é sempre plano (chave→
+// string, sem objeto/array aninhado).
+function extractBalancedJson(text: string): string | null {
+  const start = text.indexOf("{");
+  if (start === -1) return null;
+
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+
+    if (inString) {
+      if (escaped) escaped = false;
+      else if (ch === "\\") escaped = true;
+      else if (ch === '"') inString = false;
+      continue;
+    }
+
+    if (ch === '"') {
+      inString = true;
+    } else if (ch === "{") {
+      depth++;
+    } else if (ch === "}") {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+
+  if (depth === 1 && !inString) {
+    return text.slice(start).replace(/,\s*$/, "") + "}";
+  }
+  return null;
+}
+
 async function extractDocumentFields(
   base64Content: string,
   mimeType: string,
@@ -364,20 +405,29 @@ Retorne SOMENTE o JSON, sem texto adicional.`
   });
 
   const text = response.text ?? "";
-  const jsonMatch = text.match(/\{[\s\S]*\}/);
 
-  // Resposta truncada (max_tokens), em prosa, ou recusa do modelo — antes
+  // Extrai o primeiro objeto JSON balanceado a partir do primeiro "{",
+  // respeitando strings (chave dentro de um valor de texto não conta).
+  // O Gemini às vezes reporta finishReason "STOP" (não é corte por limite
+  // de tokens — candidatesTokenCount fica bem abaixo do maxOutputTokens)
+  // mas esquece de fechar o "}" final mesmo em modo JSON estruturado; e
+  // às vezes deixa sobrar texto depois do objeto. Uma regex gulosa
+  // (/\{[\s\S]*\}/) tanto falhava no primeiro caso quanto podia incluir
+  // lixo do segundo — contar profundidade de chaves resolve os dois.
+  const jsonCandidate = extractBalancedJson(text);
+
+  // Resposta truncada de verdade, em prosa, ou recusa do modelo — antes
   // virava {} silenciosamente e o arquivo era marcado como processado pra
   // sempre, sem nenhum sinal em lugar nenhum. Lançar aqui deixa o chamador
   // decidir não marcar o arquivo como lido, pra tentar de novo na próxima
   // varredura.
-  if (!jsonMatch) {
+  if (!jsonCandidate) {
     throw new Error(`Resposta da IA sem JSON reconhecível: "${text.slice(0, 200)}"`);
   }
 
   let parsed: Record<string, string>;
   try {
-    parsed = JSON.parse(jsonMatch[0]) as Record<string, string>;
+    parsed = JSON.parse(jsonCandidate) as Record<string, string>;
   } catch (err) {
     throw new Error(`JSON retornado pela IA é inválido: ${err instanceof Error ? err.message : String(err)}`);
   }
