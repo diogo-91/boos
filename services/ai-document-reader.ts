@@ -286,7 +286,12 @@ Retorne SOMENTE o JSON, sem texto adicional.`
     model: GEMINI_MODEL,
     contents: [{ role: "user", parts }],
     config: {
-      maxOutputTokens: 1024,
+      // gemini-pro-latest sempre roda em modo "thinking" (não dá pra
+      // desligar — a API rejeita thinkingBudget 0 nesse modelo) e os tokens
+      // de raciocínio saem do mesmo orçamento de maxOutputTokens. Com 1024
+      // o pensamento sozinho já estourava o limite e cortava o JSON antes
+      // de fechar, quebrando o parser abaixo.
+      maxOutputTokens: 8192,
       // Modo JSON estruturado do Gemini — o modelo é forçado a responder só
       // com JSON válido, o que já elimina boa parte dos casos de resposta em
       // prosa/truncada que o regex abaixo existia pra pegar com o Claude.
