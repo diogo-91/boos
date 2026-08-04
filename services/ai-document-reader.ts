@@ -187,6 +187,7 @@ Extraia e retorne APENAS um objeto JSON com os campos encontrados:
 {
   "nome": "nome completo da pessoa ou razão social da empresa, ou null",
   "cpf_cnpj": "CPF no formato 000.000.000-00 ou CNPJ no formato 00.000.000/0000-00, ou null",
+  "cpf_cnpj_citacao": "copie aqui, literalmente, o trecho exato do documento onde você leu esse CPF/CNPJ, ou null",
   "rg_ie": "número do RG ou Inscrição Estadual, ou null",
   "data_nascimento_abertura": "data no formato AAAA-MM-DD, ou null",
   "estado_civil": "estado civil se disponível (ex: Solteiro, Casado, Divorciado, Viúvo), ou null",
@@ -202,6 +203,7 @@ Extraia e retorne APENAS um objeto JSON com os dados do OUTORGANTE (cliente que 
 {
   "nome": "nome completo do outorgante, ou null",
   "cpf_cnpj": "CPF do outorgante no formato 000.000.000-00, ou null",
+  "cpf_cnpj_citacao": "copie aqui, literalmente, o trecho exato do documento onde você leu esse CPF, ou null",
   "rg_ie": "RG do outorgante, ou null",
   "estado_civil": "estado civil do outorgante (ex: Solteiro, Casado, Divorciado, Viúvo), ou null",
   "endereco": "endereço completo do outorgante, ou null",
@@ -220,6 +222,7 @@ Extraia e retorne APENAS um objeto JSON:
   "percentual_exito": "porcentagem de êxito como número apenas (ex: 20), ou null",
   "nome_cliente": "nome completo do cliente contratante, ou null",
   "cpf_cnpj": "CPF/CNPJ do cliente, ou null",
+  "cpf_cnpj_citacao": "copie aqui, literalmente, o trecho exato do documento onde você leu esse CPF/CNPJ, ou null",
   "telefone": "telefone do cliente com DDD, ou null",
   "email": "e-mail do cliente, ou null",
   "endereco": "endereço completo do cliente, ou null"
@@ -237,6 +240,7 @@ Extraia e retorne APENAS um objeto JSON:
   "data_protocolo": "data do protocolo no formato AAAA-MM-DD, ou null",
   "nome": "nome completo do autor/cliente, ou null",
   "cpf_cnpj": "CPF do autor/cliente, ou null",
+  "cpf_cnpj_citacao": "copie aqui, literalmente, o trecho exato do documento onde você leu esse CPF, ou null",
   "telefone": "telefone do autor/cliente com DDD, ou null",
   "email": "e-mail do autor/cliente, ou null",
   "endereco": "endereço completo do autor/cliente, ou null"
@@ -249,7 +253,8 @@ Retorne APENAS um objeto JSON com os campos que conseguir identificar com certez
 {
   "numero_cnj": "número CNJ exato no formato 0000000-00.0000.0.00.0000, ou null",
   "nome": "nome do cliente, ou null",
-  "cpf_cnpj": "CPF/CNPJ, ou null"
+  "cpf_cnpj": "CPF/CNPJ, ou null",
+  "cpf_cnpj_citacao": "copie aqui, literalmente, o trecho exato do documento onde você leu esse CPF/CNPJ, ou null"
 }
 ${NULL_INSTRUCTION}
 Retorne SOMENTE o JSON, sem texto adicional.`
@@ -296,11 +301,51 @@ Retorne SOMENTE o JSON, sem texto adicional.`
     throw new Error(`Resposta da IA sem JSON reconhecível: "${text.slice(0, 200)}"`);
   }
 
+  let parsed: Record<string, string>;
   try {
-    return JSON.parse(jsonMatch[0]) as Record<string, string>;
+    parsed = JSON.parse(jsonMatch[0]) as Record<string, string>;
   } catch (err) {
     throw new Error(`JSON retornado pela IA é inválido: ${err instanceof Error ? err.message : String(err)}`);
   }
+
+  // A IA pode "alucinar" um CPF/CNPJ que passa no dígito verificador (ver
+  // lib/validation.ts) mas não existe de fato no documento. Pra texto puro
+  // (já extraído localmente antes de chegar aqui), confirma contra o
+  // próprio texto — garantia real. Pra imagem/PDF (vão nativos pra IA, sem
+  // texto local nenhum, sem OCR no pipeline) não tem como provar de forma
+  // independente; em vez disso exige que a IA cite o trecho onde leu, e
+  // confere se os dígitos batem — reduz alucinação silenciosa, não é prova.
+  if (parsed.cpf_cnpj) {
+    const verified = isText
+      ? verifyCpfCnpjInText(parsed.cpf_cnpj, Buffer.from(base64Content, "base64").toString("utf-8"))
+      : verifyCpfCnpjCitation(parsed.cpf_cnpj, parsed.cpf_cnpj_citacao);
+
+    if (!verified) delete parsed.cpf_cnpj;
+  }
+  delete parsed.cpf_cnpj_citacao;
+
+  return parsed;
+}
+
+function findCpfCnpjCandidates(text: string): Set<string> {
+  const matches = text.match(/\d[\d.\-/]{8,18}\d/g) ?? [];
+  const result = new Set<string>();
+  for (const m of matches) {
+    const digits = m.replace(/\D/g, "");
+    if (digits.length === 11 || digits.length === 14) result.add(digits);
+  }
+  return result;
+}
+
+function verifyCpfCnpjInText(candidate: string, rawText: string): boolean {
+  const digits = candidate.replace(/\D/g, "");
+  return digits.length > 0 && findCpfCnpjCandidates(rawText).has(digits);
+}
+
+function verifyCpfCnpjCitation(candidate: string, citation: string | undefined): boolean {
+  const digits = candidate.replace(/\D/g, "");
+  const citationDigits = (citation ?? "").replace(/\D/g, "");
+  return digits.length > 0 && digits === citationDigits;
 }
 
 // Campos de data que devem estar no formato YYYY-MM-DD para o Postgres
