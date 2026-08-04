@@ -13,7 +13,7 @@ import { hojeLocalISO } from "@/lib/date-utils";
 import { parseMoneyToNumber } from "@/services/mappers";
 
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
-const GEMINI_MODEL = "gemini-2.5-flash";
+const GEMINI_MODEL = "gemini-2.5-pro";
 
 export type ExtractedClientFields = {
   nome?: string;
