@@ -346,11 +346,15 @@ Retorne SOMENTE o JSON, sem texto adicional.`
     model: GEMINI_MODEL,
     contents: [{ role: "user", parts }],
     config: {
-      // gemini-pro-latest sempre roda em modo "thinking" (não dá pra
-      // desligar — a API rejeita thinkingBudget 0 nesse modelo) e os tokens
-      // de raciocínio saem do mesmo orçamento de maxOutputTokens. Com 1024
-      // o pensamento sozinho já estourava o limite e cortava o JSON antes
-      // de fechar, quebrando o parser abaixo.
+      // gemini-3.5-flash aceita desligar o "pensamento" (thinkingBudget 0)
+      // — modelos "pro" (gemini-pro-latest) REJEITAM esse valor com erro
+      // ("This model only works in thinking mode"), então se o modelo for
+      // trocado de volta pra um "pro", remova esta linha. Sem desligar,
+      // os tokens de raciocínio saem do mesmo orçamento de maxOutputTokens
+      // e cortavam o JSON antes de fechar em documentos mais complexos
+      // (ver histórico de commits) — desligado, o orçamento inteiro vira
+      // JSON de verdade, mais rápido e mais barato também.
+      thinkingConfig: { thinkingBudget: 0 },
       maxOutputTokens: 8192,
       // Modo JSON estruturado do Gemini — o modelo é forçado a responder só
       // com JSON válido, o que já elimina boa parte dos casos de resposta em
