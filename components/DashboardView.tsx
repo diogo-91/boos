@@ -16,6 +16,7 @@ import {
 import { useOperationalData } from "@/components/OperationalDataProvider";
 import { STATUS_OPTIONS } from "@/lib/domain";
 import { formatDocument } from "@/lib/client-view-model";
+import { parseBRDate } from "@/lib/date-utils";
 import { StatusBadge } from "@/components/StatusBadge";
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -155,12 +156,24 @@ export function DashboardView() {
     // ── Clientes com Drive vinculado ─────────────────────────────────────────
     const comDrive = clients.filter(c => c.driveFolderId).length;
 
-    // ── Processos recentes (últimos 10 criados, aproximação por id) ───────────
-    // Usamos os 10 últimos da lista como proxy
+    // ── Processos recentes ──────────────────────────────────────────────────
+    // listarProcessos ordena por numero_cnj (alfabético) — a tabela processos
+    // não tem coluna de data de criação, então não dá pra ordenar por "mais
+    // recente" de verdade sem uma migration. slice(-8).reverse() sobre uma
+    // lista alfabética é só os últimos por ordem de CNJ, não os mais novos —
+    // mantido como aproximação conhecida até essa coluna existir.
     const recentProcesses = [...processes].slice(-8).reverse();
 
     // ── Clientes recentes ─────────────────────────────────────────────────────
-    const recentClients = [...clients].slice(-6).reverse();
+    // clientes tem data_cadastro — ordena por ela de verdade em vez do
+    // slice(-6) sobre a lista alfabética (que listarClientes usa por padrão).
+    const recentClients = [...clients]
+      .sort((a, b) => {
+        const dateA = parseBRDate(a.registrationDate)?.getTime() ?? 0;
+        const dateB = parseBRDate(b.registrationDate)?.getTime() ?? 0;
+        return dateB - dateA;
+      })
+      .slice(0, 6);
 
     return {
       totalClients: clients.length,

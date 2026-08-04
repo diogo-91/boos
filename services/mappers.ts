@@ -157,7 +157,7 @@ function parsePercentToNumber(value: string) {
   return Number.isFinite(number) ? number : null;
 }
 
-function parseMoneyToNumber(value: string) {
+export function parseMoneyToNumber(value: string) {
   if (!value) return null;
   const cleaned = value.replace("R$", "").replace(/\./g, "").replace(",", ".").trim();
   const number = Number(cleaned);

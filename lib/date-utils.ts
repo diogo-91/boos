@@ -46,7 +46,7 @@ export function toInputDate(value?: string) {
   return `${year}-${month}-${day}`;
 }
 
-function parseBRDate(value: string): Date | null {
+export function parseBRDate(value: string): Date | null {
   if (!value || value === "—") return null;
 
   if (/^\d{2}\/\d{2}\/\d{4}$/.test(value)) {
@@ -73,9 +73,25 @@ export function calculateDuration(
   const end = endDate ? parseBRDate(endDate) : null;
   const reference = end ?? new Date();
 
+  // Datas invertidas (fim antes do início) não são um caso "quase zero" —
+  // são um dado errado no cadastro. Sinaliza em vez de virar silenciosamente
+  // "menos de 1 mês" (anos/meses negativos nunca entravam em parts, então o
+  // resultado parecia normal mesmo com a data errada).
+  if (reference < start) {
+    return "data inválida (fim antes do início)";
+  }
+
   let years = reference.getFullYear() - start.getFullYear();
   let months = reference.getMonth() - start.getMonth();
+  let days = reference.getDate() - start.getDate();
 
+  // Comparar só o número do mês (getMonth) ignora o dia — 31/jan até 01/fev
+  // é 1 dia de diferença, mas virava "1 mês". Ajusta pelo dia real.
+  if (days < 0) {
+    months -= 1;
+    const daysInPrevMonth = new Date(reference.getFullYear(), reference.getMonth(), 0).getDate();
+    days += daysInPrevMonth;
+  }
   if (months < 0) {
     years -= 1;
     months += 12;
@@ -84,7 +100,9 @@ export function calculateDuration(
   const parts: string[] = [];
   if (years > 0) parts.push(`${years} ${years === 1 ? "ano" : "anos"}`);
   if (months > 0) parts.push(`${months} ${months === 1 ? "mês" : "meses"}`);
-  if (parts.length === 0) parts.push("menos de 1 mês");
+  if (parts.length === 0) {
+    parts.push(days > 0 ? `${days} ${days === 1 ? "dia" : "dias"}` : "menos de 1 dia");
+  }
 
   const label = isEncerrado ? "encerrado" : "em curso";
   return `${parts.join(" e ")} (${label})`;

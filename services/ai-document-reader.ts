@@ -10,6 +10,7 @@ import {
 } from "@/lib/drive-status-map";
 import { normalizeDocument, isValidCpfCnpj } from "@/lib/validation";
 import { hojeLocalISO } from "@/lib/date-utils";
+import { parseMoneyToNumber } from "@/services/mappers";
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
@@ -417,6 +418,16 @@ async function updateClientFields(clientId: string, fields: ExtractedClientField
 async function updateProcessFields(processId: string, fields: ExtractedProcessFields) {
   const sanitized = sanitizeProcessFields(fields);
   const updateData: Record<string, unknown> = { ...sanitized };
+
+  // sanitizeValue devolve valor_entrada como string formatada ("R$ 1.000,00")
+  // — igual ao que a IA extraiu. O caminho de criação de processo já
+  // converte pra número antes de gravar; esse update ia direto pra uma
+  // coluna numeric com a string crua, e Postgres rejeitava a query inteira
+  // sempre que um contrato de honorários chegava vinculado a um processo já
+  // existente.
+  if (sanitized.valor_entrada !== undefined) {
+    updateData.valor_entrada = parseMoneyToNumber(sanitized.valor_entrada);
+  }
 
   if (Object.keys(updateData).length === 0) return;
 
@@ -1012,9 +1023,7 @@ async function ensureProcessoFromClienteFile(
     vara_comarca: safeProc.vara_comarca ?? null,
     data_protocolo: safeProc.data_protocolo ?? null,
     modelo_cobranca: safeProc.modelo_cobranca ?? null,
-    valor_entrada: safeProc.valor_entrada
-      ? Number(safeProc.valor_entrada.replace(/[^\d,]/g, "").replace(",", ".")) || null
-      : null,
+    valor_entrada: safeProc.valor_entrada ? parseMoneyToNumber(safeProc.valor_entrada) : null,
     percentual_exito: safeProc.percentual_exito
       ? Number(safeProc.percentual_exito) || null
       : null,

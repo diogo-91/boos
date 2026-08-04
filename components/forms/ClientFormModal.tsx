@@ -6,7 +6,7 @@ import type { ClientFormValues } from "@/components/OperationalDataProvider";
 import { toInputDate } from "@/lib/date-utils";
 import { STATUS_OPTIONS } from "@/lib/domain";
 import { findDuplicateClient } from "@/lib/client-queries";
-import { isValidEmail, isValidPercent } from "@/lib/validation";
+import { isValidCpfCnpj, isValidEmail, isValidPercent, normalizeDocument } from "@/lib/validation";
 import { FormField } from "@/components/forms/FormField";
 import { DateInput, SelectInput, TextInput } from "@/components/forms/inputs";
 import { Button } from "@/components/ui/Button";
@@ -78,8 +78,14 @@ export function ClientFormModal({
     if (!values.legalName.trim()) {
       next.legalName = "Informe o nome completo ou razão social.";
     }
+    const documentUnchanged = client && normalizeDocument(values.document) === normalizeDocument(client.document);
     if (!values.document.trim()) {
       next.document = "Informe o CPF ou CNPJ.";
+    } else if (!documentUnchanged && !isValidCpfCnpj(normalizeDocument(values.document))) {
+      // Só exige válido na criação ou quando o valor muda de verdade — não
+      // trava a edição de outros campos de um cliente legado cujo CPF/CNPJ
+      // já estava inválido no banco antes desta checagem existir.
+      next.document = "CPF/CNPJ inválido — confira o número informado.";
     }
     if (!values.status) {
       next.status = "Selecione o status do cliente.";

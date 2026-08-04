@@ -15,7 +15,10 @@ export const CLIENT_STATUS_FILTERS = [
   "Contratação",
   "Audiência",
   "Arquivados",
-  "Cancelados"
+  "Cancelados",
+  "Dativo",
+  "Sarandi",
+  "Parceiros"
 ] as const;
 
 export const PROCESS_STATUS_FILTERS = [

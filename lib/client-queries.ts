@@ -13,7 +13,7 @@ export type ClientFilterState = {
 function getClientSearchIndex(client: Client, processes: LegalProcess[]) {
   const linked = processes.filter((process) => client.processIds.includes(process.id));
 
-  return normalizeText(
+  const text = normalizeText(
     [
       client.name,
       client.legalName,
@@ -33,6 +33,17 @@ function getClientSearchIndex(client: Client, processes: LegalProcess[]) {
       .filter(Boolean)
       .join(" ")
   );
+
+  // client.document guarda o CPF/CNPJ formatado ("123.456.789-01"). Buscar
+  // só pelos dígitos (o jeito mais comum de digitar/colar um CPF) não batia
+  // contra esse texto formatado — dependendo do que mais aparecesse no
+  // restante do índice, a busca podia não achar o cliente certo ou casar
+  // com outro por coincidência de dígitos soltos em outro campo.
+  const digits = normalizeDocument(
+    [client.document, client.secondaryDocument].filter(Boolean).join(" ")
+  );
+
+  return { text, digits };
 }
 
 function matchesClientStatus(client: Client, filter: string) {
@@ -61,10 +72,14 @@ export function filterClients(
   filters: ClientFilterState
 ) {
   const normalizedSearch = normalizeText(filters.search);
+  const searchDigits = normalizeDocument(filters.search);
 
   return clients.filter((client) => {
-    if (normalizedSearch && !getClientSearchIndex(client, processes).includes(normalizedSearch)) {
-      return false;
+    if (normalizedSearch) {
+      const index = getClientSearchIndex(client, processes);
+      const matchesText = index.text.includes(normalizedSearch);
+      const matchesDigits = searchDigits.length > 0 && index.digits.includes(searchDigits);
+      if (!matchesText && !matchesDigits) return false;
     }
     if (!matchesClientStatus(client, filters.clientStatus)) return false;
     if (!matchesProcessStatus(client, filters.processStatus, processes)) return false;

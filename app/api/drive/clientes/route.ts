@@ -3,6 +3,7 @@ import type { Client } from "@/lib/types";
 import { isGoogleDriveConfigured } from "@/lib/google/drive";
 import { atualizarDriveCliente, buscarClientePorId } from "@/services/clientes";
 import { criarPastaCliente } from "@/services/google-drive";
+import { acquireClientFolderLock, releaseClientFolderLock } from "@/services/client-drive-lock";
 
 export const runtime = "nodejs";
 
@@ -25,11 +26,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // findOrCreateFolder não tem lock (M3) — a criação automática no cadastro
-    // e o botão manual de "abrir Drive" podem disparar essa rota quase ao
-    // mesmo tempo pro mesmo cliente. Reler o banco bem antes de criar reduz
-    // bastante a janela: se outra requisição concorrente já terminou e
-    // salvou a pasta, reaproveita em vez de criar uma segunda.
+    // findOrCreateFolder não tem lock — a criação automática no cadastro e o
+    // botão manual de "abrir Drive" podem disparar essa rota quase ao mesmo
+    // tempo pro mesmo cliente. Checagem rápida antes do lock evita até
+    // precisar dele no caso comum (pasta já existe).
     const freshClient = await buscarClientePorId(cliente.id);
     if (freshClient?.driveFolderId) {
       return NextResponse.json({
@@ -41,14 +41,39 @@ export async function POST(request: Request) {
       });
     }
 
-    const driveFolder = await criarPastaCliente(cliente);
-    const updatedClient = await atualizarDriveCliente(
-      cliente.id,
-      driveFolder.driveFolderId,
-      driveFolder.drivePath
-    );
+    const lockToken = await acquireClientFolderLock(cliente.id);
+    if (!lockToken) {
+      return NextResponse.json(
+        { message: "Já existe uma criação de pasta em andamento para este cliente — tente novamente em instantes." },
+        { status: 409 }
+      );
+    }
 
-    return NextResponse.json({ cliente: updatedClient, driveFolder });
+    try {
+      // Relê depois do lock — se outra requisição criou a pasta entre a
+      // primeira leitura e a aquisição do lock, reaproveita em vez de criar.
+      const clientAfterLock = await buscarClientePorId(cliente.id);
+      if (clientAfterLock?.driveFolderId) {
+        return NextResponse.json({
+          cliente: clientAfterLock,
+          driveFolder: {
+            driveFolderId: clientAfterLock.driveFolderId,
+            drivePath: clientAfterLock.driveFolder
+          }
+        });
+      }
+
+      const driveFolder = await criarPastaCliente(cliente);
+      const updatedClient = await atualizarDriveCliente(
+        cliente.id,
+        driveFolder.driveFolderId,
+        driveFolder.drivePath
+      );
+
+      return NextResponse.json({ cliente: updatedClient, driveFolder });
+    } finally {
+      await releaseClientFolderLock(cliente.id, lockToken);
+    }
   } catch (error) {
     console.error("[Drive] Falha ao criar pasta do cliente:", error);
     return NextResponse.json(
