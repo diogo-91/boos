@@ -10,6 +10,15 @@ import {
   linkOrCreateClienteFromFolder
 } from "@/services/drive-status-sync";
 
+// Mesmo critério de nome usado em detectDocumentType (ai-document-reader.ts)
+// pra reconhecer procuração — duplicado aqui de propósito, é só um filtro
+// de nome de arquivo (sem custo de rede) usado pelo modo "só procuração"
+// abaixo, não vale importar o módulo inteiro só por isso.
+function looksLikeProcuracao(fileName: string): boolean {
+  const name = fileName.toLowerCase();
+  return name.includes("procuracao") || name.includes("procuração");
+}
+
 async function listChildren(parentId: string) {
   const drive = getGoogleDriveClient();
   const items: Array<{ id: string; name: string; mimeType: string; modifiedTime: string | null }> = [];
@@ -147,7 +156,16 @@ async function handleTimeoutIfNeeded(
   return true;
 }
 
-export async function runFullScan(): Promise<FullScanResult> {
+export type FullScanOptions = {
+  // Quando true, ignora todo arquivo que não pareça procuração pelo nome —
+  // usado pra cadastrar rápido um lote grande de clientes (a procuração já
+  // tem prioridade pra qualificação, ver PRIORITY_ID_DOCS em
+  // ai-document-reader.ts) sem esperar a leitura de dezenas de arquivos
+  // por pasta. Os demais arquivos ficam pra uma varredura normal depois.
+  onlyProcuracao?: boolean;
+};
+
+export async function runFullScan(options: FullScanOptions = {}): Promise<FullScanResult> {
   const startedAt = Date.now();
 
   const result: FullScanResult = {
@@ -270,6 +288,7 @@ export async function runFullScan(): Promise<FullScanResult> {
           const processoProcessedMap = await getProcessedFileModifiedTimeMap(processoFileIds);
           for (const file of processoChildren) {
             if (file.mimeType === FOLDER_MIME) continue;
+            if (options.onlyProcuracao && !looksLikeProcuracao(file.name)) continue;
             try {
               const read = await readDriveFile(file.id, file.name, child.id, undefined, {
                 modifiedTime: file.modifiedTime,
@@ -295,6 +314,7 @@ export async function runFullScan(): Promise<FullScanResult> {
           }
         } else {
           // Arquivo direto na pasta do cliente
+          if (options.onlyProcuracao && !looksLikeProcuracao(child.name)) continue;
           try {
             const read = await readDriveFile(child.id, child.name, clienteItem.id, undefined, {
               modifiedTime: child.modifiedTime,

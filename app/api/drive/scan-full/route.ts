@@ -20,8 +20,19 @@ export async function POST(request: Request) {
     );
   }
 
+  // Corpo opcional — { "onlyProcuracao": true } pra cadastrar um lote
+  // grande de clientes rápido, lendo só a procuração de cada pasta em vez
+  // de todos os arquivos. Sem corpo (ou corpo inválido), roda normal.
+  let onlyProcuracao = false;
   try {
-    const result = await runFullScan();
+    const body = await request.json() as { onlyProcuracao?: boolean };
+    onlyProcuracao = Boolean(body?.onlyProcuracao);
+  } catch {
+    // Sem corpo — varredura normal, comportamento de sempre.
+  }
+
+  try {
+    const result = await runFullScan({ onlyProcuracao });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     console.error("[FullScan] Erro:", err);
