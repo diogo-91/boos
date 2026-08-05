@@ -122,6 +122,10 @@ export type FullScanResult = {
 // Deixa margem de segurança para o limite de 5 min (300s) da function.
 const MAX_DURATION_MS = 4.5 * 60 * 1000;
 
+// Bem acima do volume normal de uma pasta de cliente (tipicamente 10-40
+// itens) — só dispara pra casos de fato fora da curva.
+const LARGE_CLIENT_ITEM_THRESHOLD = 200;
+
 // Antes, o corte de tempo só era checado depois de terminar um cliente
 // inteiro — um cliente com volume muito grande de arquivos podia estourar o
 // maxDuration da plataforma antes de qualquer checkpoint ser salvo. Chamado
@@ -212,6 +216,21 @@ export async function runFullScan(): Promise<FullScanResult> {
       // Percorre conteúdo da pasta do cliente
       const clienteChildren = await listChildren(clienteItem.id);
 
+      // Cliente com centenas/milhares de itens numa pasta só (ex: WhatsApp
+      // exportado em massa, digitalização de anos de processo) fazia o
+      // checkpoint reprocessar esse mesmo cliente rodada após rodada sem
+      // nunca terminar — cada retomada reconfere tudo que já foi pulado
+      // antes de alcançar algo novo, e trava o resto da varredura atrás
+      // dele. Acima do limite, pula a leitura dos arquivos deste cliente
+      // (o cadastro do cliente em si já foi feito acima) e sinaliza pra
+      // revisão manual, sem travar os próximos clientes da fila.
+      if (clienteChildren.length > LARGE_CLIENT_ITEM_THRESHOLD) {
+        result.errors.push(
+          `[cliente] ${cliente.nome}: pasta com ${clienteChildren.length} itens (acima do limite de ${LARGE_CLIENT_ITEM_THRESHOLD}) — leitura de documentos pulada por enquanto, precisa de revisão manual.`
+        );
+        continue;
+      }
+
       for (const child of clienteChildren) {
         if (child.mimeType === FOLDER_MIME) {
           // Subpasta = processo
@@ -228,8 +247,16 @@ export async function runFullScan(): Promise<FullScanResult> {
             result.errors.push(`[processo] ${child.name}: ${err instanceof Error ? err.message : String(err)}`);
           }
 
-          // Lê arquivos dentro da pasta do processo
+          // Lê arquivos dentro da pasta do processo — mesma guarda de
+          // volume da pasta do cliente, pro mesmo problema não se repetir
+          // um nível abaixo.
           const processoChildren = await listChildren(child.id);
+          if (processoChildren.length > LARGE_CLIENT_ITEM_THRESHOLD) {
+            result.errors.push(
+              `[processo] ${child.name} (${cliente.nome}): pasta com ${processoChildren.length} itens (acima do limite de ${LARGE_CLIENT_ITEM_THRESHOLD}) — leitura de documentos pulada por enquanto, precisa de revisão manual.`
+            );
+            continue;
+          }
           for (const file of processoChildren) {
             if (file.mimeType === FOLDER_MIME) continue;
             try {
