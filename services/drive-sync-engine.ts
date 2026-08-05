@@ -80,6 +80,16 @@ async function criarProcessoAutomatico(folderId: string, folderName: string, cli
   await createProcessoFromFolder(folderId, folderName, cliente.id, cliente.drive_path || cliente.nome);
 }
 
+// O Google invalida o pageToken (400/410) se ele ficar muito tempo sem ser
+// consumido — ex.: cron parado, falha de rede persistente. Sem esse check o
+// sync ficava travado para sempre reusando o mesmo token quebrado.
+function isInvalidPageTokenError(err: unknown): boolean {
+  const status = (err as { code?: number; status?: number; response?: { status?: number } })?.code
+    ?? (err as { status?: number })?.status
+    ?? (err as { response?: { status?: number } })?.response?.status;
+  return status === 400 || status === 410;
+}
+
 export type SyncResult = {
   processed: number;
   clientesCreated: number;
@@ -113,14 +123,27 @@ export async function runDriveSync(): Promise<SyncResult> {
   const driveId = await getGoogleSharedDriveId();
 
   while (nextPageToken) {
-    const changesPage = await getGoogleDriveClient().changes.list({
-      pageToken: nextPageToken,
-      fields: "nextPageToken,newStartPageToken,changes(fileId,removed,file(id,name,mimeType,parents,trashed))",
-      includeItemsFromAllDrives: Boolean(driveId),
-      supportsAllDrives: Boolean(driveId),
-      driveId: driveId ?? undefined,
-      pageSize: 100
-    });
+    let changesPage;
+    try {
+      changesPage = await getGoogleDriveClient().changes.list({
+        pageToken: nextPageToken,
+        fields: "nextPageToken,newStartPageToken,changes(fileId,removed,file(id,name,mimeType,parents,trashed))",
+        includeItemsFromAllDrives: Boolean(driveId),
+        supportsAllDrives: Boolean(driveId),
+        driveId: driveId ?? undefined,
+        pageSize: 100
+      });
+    } catch (err) {
+      if (!isInvalidPageTokenError(err)) throw err;
+
+      console.error("[DriveSync] page_token inválido/expirado — resetando cursor.", err);
+      const freshToken = await getStartPageToken();
+      await saveSyncToken(freshToken);
+      result.errors.push(
+        "Cursor de sincronização expirado; foi resetado automaticamente. Rode uma varredura completa para capturar o que ficou de fora enquanto o sync estava travado."
+      );
+      return result;
+    }
 
     const changesData = changesPage.data as {
       changes?: Array<{
