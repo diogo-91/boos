@@ -1,7 +1,7 @@
 import type { ClientStatus } from "@/lib/types";
 import { getGoogleDriveClient, getGoogleDriveRootFolderId } from "@/lib/google/drive";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { readDriveFile } from "@/services/ai-document-reader";
+import { readDriveFile, getProcessedFileModifiedTimeMap } from "@/services/ai-document-reader";
 import { FOLDER_MIME, STATUS_FOLDER_MAP, matchStatusFolderKey } from "@/lib/drive-status-map";
 import {
   createProcessoFromFolder,
@@ -12,13 +12,13 @@ import {
 
 async function listChildren(parentId: string) {
   const drive = getGoogleDriveClient();
-  const items: Array<{ id: string; name: string; mimeType: string }> = [];
+  const items: Array<{ id: string; name: string; mimeType: string; modifiedTime: string | null }> = [];
   let pageToken: string | undefined;
 
   do {
     const { data } = await drive.files.list({
       q: `'${parentId}' in parents and trashed = false`,
-      fields: "nextPageToken,files(id,name,mimeType)",
+      fields: "nextPageToken,files(id,name,mimeType,modifiedTime)",
       orderBy: "name",
       pageSize: 100,
       pageToken,
@@ -27,7 +27,7 @@ async function listChildren(parentId: string) {
     });
     for (const f of data.files ?? []) {
       if (f.id && f.name && f.mimeType) {
-        items.push({ id: f.id, name: f.name, mimeType: f.mimeType });
+        items.push({ id: f.id, name: f.name, mimeType: f.mimeType, modifiedTime: f.modifiedTime ?? null });
       }
     }
     pageToken = data.nextPageToken ?? undefined;
@@ -231,6 +231,15 @@ export async function runFullScan(): Promise<FullScanResult> {
         continue;
       }
 
+      // Busca em UMA consulta só quais arquivos diretos da pasta do cliente
+      // já foram processados — antes disso rodava uma consulta ao Supabase
+      // (mais uma chamada ao Drive só pro modifiedTime, já resolvida acima
+      // via listChildren) POR ARQUIVO, mesmo pra pastas 100% já processadas.
+      // Numa varredura reconferindo dezenas de clientes já feitos, essa
+      // cadeia de idas e voltas sequenciais era o principal motivo da lentidão.
+      const clienteFileIds = clienteChildren.filter((c) => c.mimeType !== FOLDER_MIME).map((c) => c.id);
+      const clienteProcessedMap = await getProcessedFileModifiedTimeMap(clienteFileIds);
+
       for (const child of clienteChildren) {
         if (child.mimeType === FOLDER_MIME) {
           // Subpasta = processo
@@ -257,10 +266,15 @@ export async function runFullScan(): Promise<FullScanResult> {
             );
             continue;
           }
+          const processoFileIds = processoChildren.filter((c) => c.mimeType !== FOLDER_MIME).map((c) => c.id);
+          const processoProcessedMap = await getProcessedFileModifiedTimeMap(processoFileIds);
           for (const file of processoChildren) {
             if (file.mimeType === FOLDER_MIME) continue;
             try {
-              const read = await readDriveFile(file.id, file.name, child.id);
+              const read = await readDriveFile(file.id, file.name, child.id, undefined, {
+                modifiedTime: file.modifiedTime,
+                processedModifiedTime: processoProcessedMap[file.id] ?? null
+              });
               result.fileDetails.push({
                 fileName: file.name,
                 documentType: read.documentType,
@@ -282,7 +296,10 @@ export async function runFullScan(): Promise<FullScanResult> {
         } else {
           // Arquivo direto na pasta do cliente
           try {
-            const read = await readDriveFile(child.id, child.name, clienteItem.id);
+            const read = await readDriveFile(child.id, child.name, clienteItem.id, undefined, {
+              modifiedTime: child.modifiedTime,
+              processedModifiedTime: clienteProcessedMap[child.id] ?? null
+            });
             result.fileDetails.push({
               fileName: child.name,
               documentType: read.documentType,

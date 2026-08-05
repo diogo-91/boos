@@ -696,6 +696,30 @@ async function getProcessedFileModifiedTime(fileId: string): Promise<string | nu
   return data?.modified_time ?? null;
 }
 
+// Mesma informação de getProcessedFileModifiedTime, mas pra um lote de
+// arquivos numa única consulta — usado pela varredura completa, que antes
+// fazia uma consulta (mais uma chamada ao Drive pra modifiedTime) POR
+// ARQUIVO antes mesmo de saber se ele já tinha sido lido. Numa pasta de
+// cliente com dezenas de arquivos já processados isso significava dezenas
+// de idas e voltas sequenciais só pra reconfirmar "nada mudou" — o motivo
+// real da varredura ficar lenta reprocessando clientes já feitos.
+export async function getProcessedFileModifiedTimeMap(
+  fileIds: string[]
+): Promise<Record<string, string | null>> {
+  if (fileIds.length === 0) return {};
+
+  const { data } = await getSupabaseServiceClient()
+    .from("documentos_processados")
+    .select("file_id,modified_time")
+    .in("file_id", fileIds);
+
+  const map: Record<string, string | null> = {};
+  for (const row of data ?? []) {
+    map[row.file_id as string] = (row.modified_time as string | null) ?? null;
+  }
+  return map;
+}
+
 async function markFileProcessed(fileId: string, modifiedTime: string | null): Promise<void> {
   const { error } = await getSupabaseServiceClient()
     .from("documentos_processados")
@@ -759,7 +783,15 @@ export async function readDriveFile(
   fileId: string,
   fileName: string,
   parentFolderId: string,
-  emit: ProgressEmitter = () => {}
+  emit: ProgressEmitter = () => {},
+  // Permite ao chamador informar de antemão o modifiedTime (do Drive) e/ou
+  // o modifiedTime já processado (do banco), pulando as chamadas
+  // individuais abaixo — usado pela varredura completa, que já busca
+  // ambos em lote pra pasta inteira antes de chamar isso arquivo por
+  // arquivo. undefined (não passado) preserva o comportamento antigo de
+  // buscar aqui dentro, pros outros chamadores (leitura avulsa, sync
+  // incremental) que não têm esse contexto em lote.
+  known?: { modifiedTime?: string | null; processedModifiedTime?: string | null }
 ): Promise<ReadResult> {
   const result: ReadResult = {
     fileId,
@@ -773,8 +805,12 @@ export async function readDriveFile(
 
   emit("context", "active", "Identificando pasta e tipo de documento");
 
-  const modifiedTime = await getFileModifiedTime(fileId);
-  const processedModifiedTime = await getProcessedFileModifiedTime(fileId);
+  const modifiedTime =
+    known?.modifiedTime !== undefined ? known.modifiedTime : await getFileModifiedTime(fileId);
+  const processedModifiedTime =
+    known?.processedModifiedTime !== undefined
+      ? known.processedModifiedTime
+      : await getProcessedFileModifiedTime(fileId);
   if (
     processedModifiedTime &&
     modifiedTime &&
