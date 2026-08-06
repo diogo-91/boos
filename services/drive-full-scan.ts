@@ -163,6 +163,13 @@ export type FullScanOptions = {
   // ai-document-reader.ts) sem esperar a leitura de dezenas de arquivos
   // por pasta. Os demais arquivos ficam pra uma varredura normal depois.
   onlyProcuracao?: boolean;
+  // Restringe a varredura a uma única pasta de status (chave de
+  // STATUS_FOLDER_MAP, ex: "02_ativos", ou o nome de exibição, ex:
+  // "Ativo" — matchStatusFolderKey aceita os dois). Sem isso, percorre
+  // todas as pastas de status como sempre. Existe porque re-varrer a
+  // árvore inteira só pra alcançar uma pasta específica no fim da fila
+  // desperdiça rodada atrás de rodada reconferindo o que já está pronto.
+  onlyStatusFolder?: string;
 };
 
 export async function runFullScan(options: FullScanOptions = {}): Promise<FullScanResult> {
@@ -182,20 +189,42 @@ export async function runFullScan(options: FullScanOptions = {}): Promise<FullSc
   };
 
   const checkpoint = await getCheckpoint();
-  result.resumedFromCheckpoint = Boolean(checkpoint.statusFolderId);
-  let skipUntilStatusFolder = Boolean(checkpoint.statusFolderId);
-  let skipUntilClienteFolder = Boolean(checkpoint.clienteFolderId);
 
   const rootId = getGoogleDriveRootFolderId();
   const rootChildren = await listChildren(rootId);
+
+  // Se pedido, resolve o filtro de pasta única pra chave canônica — aceita
+  // tanto o nome da pasta ("02_ativos", via matchStatusFolderKey) quanto o
+  // nome de exibição do status ("Ativo", buscando o valor em STATUS_FOLDER_MAP).
+  const onlyStatusKey = options.onlyStatusFolder
+    ? matchStatusFolderKey(options.onlyStatusFolder) ??
+      Object.entries(STATUS_FOLDER_MAP).find(
+        ([, status]) => status.toLowerCase() === options.onlyStatusFolder!.toLowerCase()
+      )?.[0]
+    : undefined;
 
   // Identifica as pastas de status na raiz
   const statusFolders: Array<{ id: string; name: string; status: ClientStatus }> = [];
   for (const item of rootChildren) {
     if (item.mimeType !== FOLDER_MIME) continue;
     const key = matchStatusFolderKey(item.name);
-    if (key) statusFolders.push({ id: item.id, name: item.name, status: STATUS_FOLDER_MAP[key] });
+    if (!key) continue;
+    if (onlyStatusKey && key !== onlyStatusKey) continue;
+    statusFolders.push({ id: item.id, name: item.name, status: STATUS_FOLDER_MAP[key] });
   }
+
+  // Um checkpoint salvo por uma varredura sem filtro (ou com outro filtro)
+  // não corresponde a nenhuma pasta dentro do conjunto restrito por
+  // onlyStatusFolder — sem essa checagem, skipUntilStatusFolder nunca
+  // encontraria a pasta procurada dentro da lista filtrada e a varredura
+  // "terminaria" silenciosamente sem processar nada.
+  const checkpointMatchesScope =
+    Boolean(checkpoint.statusFolderId) &&
+    statusFolders.some((f) => f.id === checkpoint.statusFolderId);
+
+  result.resumedFromCheckpoint = checkpointMatchesScope;
+  let skipUntilStatusFolder = checkpointMatchesScope;
+  let skipUntilClienteFolder = checkpointMatchesScope && Boolean(checkpoint.clienteFolderId);
 
   statusLoop: for (const statusFolder of statusFolders) {
     if (skipUntilStatusFolder) {

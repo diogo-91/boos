@@ -22,17 +22,21 @@ export async function POST(request: Request) {
 
   // Corpo opcional — { "onlyProcuracao": true } pra cadastrar um lote
   // grande de clientes rápido, lendo só a procuração de cada pasta em vez
-  // de todos os arquivos. Sem corpo (ou corpo inválido), roda normal.
+  // de todos os arquivos; { "onlyStatusFolder": "02_ativos" } (ou "Ativo")
+  // pra restringir a varredura a uma única pasta de status. Sem corpo
+  // (ou corpo inválido), roda normal.
   let onlyProcuracao = false;
+  let onlyStatusFolder: string | undefined;
   try {
-    const body = await request.json() as { onlyProcuracao?: boolean };
+    const body = await request.json() as { onlyProcuracao?: boolean; onlyStatusFolder?: string };
     onlyProcuracao = Boolean(body?.onlyProcuracao);
+    onlyStatusFolder = body?.onlyStatusFolder || undefined;
   } catch {
     // Sem corpo — varredura normal, comportamento de sempre.
   }
 
   try {
-    const result = await runFullScan({ onlyProcuracao });
+    const result = await runFullScan({ onlyProcuracao, onlyStatusFolder });
     return NextResponse.json({ ok: true, ...result });
   } catch (err) {
     console.error("[FullScan] Erro:", err);
