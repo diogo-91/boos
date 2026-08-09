@@ -3,7 +3,7 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { STATUS_DB_MAP, folderNameToDisplayName, parseProcessFolderName } from "@/lib/drive-status-map";
 import { hojeLocalISO } from "@/lib/date-utils";
 
-export type DriveClienteRecord = { id: string; nome: string; drive_path: string };
+export type DriveClienteRecord = { id: string; nome: string; drive_path: string; status: string };
 
 export async function findClienteByDriveFolderId(folderId: string): Promise<DriveClienteRecord | null> {
   // .limit(1) é essencial aqui: sem ele, .maybeSingle() dá erro se houver mais
@@ -12,7 +12,7 @@ export async function findClienteByDriveFolderId(folderId: string): Promise<Driv
   // encontrado" — criando mais uma duplicata a cada varredura, indefinidamente.
   const { data } = await getSupabaseServiceClient()
     .from("clientes")
-    .select("id,nome,drive_path")
+    .select("id,nome,drive_path,status")
     .eq("drive_folder_id", folderId)
     .limit(1)
     .maybeSingle();
@@ -22,7 +22,7 @@ export async function findClienteByDriveFolderId(folderId: string): Promise<Driv
 async function findClienteByNome(nome: string) {
   const { data } = await getSupabaseServiceClient()
     .from("clientes")
-    .select("id,nome,drive_path,drive_folder_id")
+    .select("id,nome,drive_path,drive_folder_id,status")
     .eq("nome", nome);
 
   const candidates = data ?? [];
@@ -69,7 +69,7 @@ async function linkExistingClienteToFolder(
     .update({ drive_folder_id: folderId, drive_path: drivePath })
     .eq("id", existing.id);
 
-  return { id: existing.id, nome: existing.nome, drive_path: drivePath };
+  return { id: existing.id, nome: existing.nome, drive_path: drivePath, status: existing.status };
 }
 
 export async function linkOrCreateClienteFromFolder(
@@ -103,7 +103,7 @@ export async function linkOrCreateClienteFromFolder(
   });
 
   if (error) throw error;
-  return { cliente: { id, nome, drive_path }, created: true };
+  return { cliente: { id, nome, drive_path, status: STATUS_DB_MAP[status] }, created: true };
 }
 
 export async function updateClienteStatusFromFolder(

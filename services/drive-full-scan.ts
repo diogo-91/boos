@@ -2,12 +2,13 @@ import type { ClientStatus } from "@/lib/types";
 import { getGoogleDriveClient, getGoogleDriveRootFolderId } from "@/lib/google/drive";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { readDriveFile, getProcessedFileModifiedTimeMap } from "@/services/ai-document-reader";
-import { FOLDER_MIME, STATUS_FOLDER_MAP, matchStatusFolderKey } from "@/lib/drive-status-map";
+import { FOLDER_MIME, STATUS_DB_MAP, STATUS_FOLDER_MAP, matchStatusFolderKey } from "@/lib/drive-status-map";
 import {
   createProcessoFromFolder,
   findClienteByDriveFolderId,
   findProcessoByDriveFolderId,
-  linkOrCreateClienteFromFolder
+  linkOrCreateClienteFromFolder,
+  updateClienteStatusFromFolder
 } from "@/services/drive-status-sync";
 
 // Mesmo critério de nome usado em detectDocumentType (ai-document-reader.ts)
@@ -82,7 +83,25 @@ async function ensureCliente(
   statusFolderName: string
 ): Promise<{ id: string; nome: string; drive_path: string; created: boolean }> {
   const existing = await findClienteByDriveFolderId(folderId);
-  if (existing) return { ...existing, created: false };
+  if (existing) {
+    // A varredura completa só criava clientes novos — se a pasta de um
+    // cliente já cadastrado for movida manualmente pro Drive pra outra
+    // pasta de status, o status no banco ficava desatualizado até a
+    // sincronização incremental (que roda de tempos em tempos) passar por
+    // ali. Reconcilia aqui também, do mesmo jeito que
+    // updateClienteStatusFromFolder já faz pro caminho incremental.
+    const expectedDbStatus = STATUS_DB_MAP[status];
+    if (existing.status !== expectedDbStatus) {
+      await updateClienteStatusFromFolder(folderId, status, statusFolderName, folderName);
+      return {
+        id: existing.id,
+        nome: existing.nome,
+        drive_path: `${statusFolderName} › ${folderName}`,
+        created: false
+      };
+    }
+    return { ...existing, created: false };
+  }
 
   const { cliente, created } = await linkOrCreateClienteFromFolder(
     folderId,
