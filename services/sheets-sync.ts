@@ -1,4 +1,4 @@
-import { getGoogleDriveClient } from "@/lib/google/drive";
+import { getGoogleAccessToken, getGoogleDriveClient } from "@/lib/google/drive";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 
 const SHEET_ID = process.env.GOOGLE_SHEETS_ID ?? "";
@@ -59,15 +59,35 @@ function parseCsvLine(line: string): string[] {
 // planilha precisa ter pros índices fixos abaixo ainda fazerem sentido.
 const MIN_EXPECTED_COLUMNS = Math.max(...Object.values(SHEET_COLUMN)) + 1;
 
-export async function readSheetRows(): Promise<SheetRow[]> {
+// Exporta a planilha inteira (aba padrão/primeira) via API do Drive — usado
+// pelo sync recorrente da planilha de honorários (GOOGLE_SHEETS_ID).
+async function fetchDefaultSheetCsv(spreadsheetId: string): Promise<string> {
   const drive = getGoogleDriveClient();
-
   const res = await drive.files.export(
-    { fileId: SHEET_ID, mimeType: "text/csv" },
+    { fileId: spreadsheetId, mimeType: "text/csv" },
     { responseType: "text" }
   );
+  return res.data as string;
+}
 
-  const [headerLine, ...lines] = (res.data as string).trim().split("\n");
+// drive.files.export não suporta escolher uma aba específica (gid) — sempre
+// exporta a primeira. Pra planilhas com múltiplas abas (ex: uma aba por
+// pasta de status), usa o endpoint de exportação do próprio Sheets, que
+// aceita gid e autentica com o mesmo token de acesso da conta de serviço.
+async function fetchSheetTabCsv(spreadsheetId: string, gid: string): Promise<string> {
+  const token = await getGoogleAccessToken();
+  const url = `https://docs.google.com/spreadsheets/d/${spreadsheetId}/export?format=csv&gid=${gid}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+  if (!res.ok) {
+    throw new Error(`Falha ao exportar aba da planilha (status ${res.status}).`);
+  }
+  return res.text();
+}
+
+export async function readSheetRows(spreadsheetId: string = SHEET_ID, gid?: string): Promise<SheetRow[]> {
+  const csv = gid ? await fetchSheetTabCsv(spreadsheetId, gid) : await fetchDefaultSheetCsv(spreadsheetId);
+
+  const [headerLine, ...lines] = csv.trim().split("\n");
 
   // Sem isso, uma coluna removida da planilha desloca todos os índices
   // fixos abaixo pro lugar errado — sem nenhum erro. Não valida por NOME de
@@ -113,7 +133,7 @@ export type SheetSyncResult = {
   erros: string[];
 };
 
-export async function runSheetSync(): Promise<SheetSyncResult> {
+export async function runSheetSync(spreadsheetId: string = SHEET_ID, gid?: string): Promise<SheetSyncResult> {
   const result: SheetSyncResult = {
     total: 0,
     processosAtualizados: 0,
@@ -123,7 +143,7 @@ export async function runSheetSync(): Promise<SheetSyncResult> {
   };
 
   const supabase = getSupabaseServiceClient();
-  const rows = await readSheetRows();
+  const rows = await readSheetRows(spreadsheetId, gid);
   result.total = rows.length;
 
   // Carrega todos os processos e clientes do banco de uma vez

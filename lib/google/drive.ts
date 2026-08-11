@@ -38,7 +38,7 @@ export function getGoogleDriveRootFolderId() {
   return rootFolderId;
 }
 
-export function getGoogleDriveClient() {
+function getGoogleAuthClient() {
   const clientEmail = process.env.GOOGLE_CLIENT_EMAIL;
   const privateKey = validateGooglePrivateKey();
 
@@ -46,13 +46,25 @@ export function getGoogleDriveClient() {
     throw new Error("Credenciais do Google Drive não configuradas.");
   }
 
-  const auth = new google.auth.JWT({
+  return new google.auth.JWT({
     email: clientEmail,
     key: privateKey,
     scopes: DRIVE_SCOPES
   });
+}
 
-  return google.drive({ version: "v3", auth });
+export function getGoogleDriveClient() {
+  return google.drive({ version: "v3", auth: getGoogleAuthClient() });
+}
+
+// Token de acesso cru — usado para chamar endpoints do Google que a API do
+// Drive não cobre (ex: exportar uma aba específica de uma planilha por gid,
+// que drive.files.export não suporta).
+export async function getGoogleAccessToken(): Promise<string> {
+  const auth = getGoogleAuthClient();
+  const { token } = await auth.getAccessToken();
+  if (!token) throw new Error("Não foi possível obter token de acesso do Google.");
+  return token;
 }
 
 export async function getGoogleDriveRootFolderInfo() {
