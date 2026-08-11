@@ -52,6 +52,7 @@ export type Client = {
   driveFolderId?: string | null;
   driveFolder: string;
   processIds: string[];
+  notes: string;
 };
 
 export type LegalProcess = {

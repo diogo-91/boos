@@ -194,7 +194,8 @@ export function mapClienteFromDb(row: AnyRecord): Client {
     // cai pro placeholder "—" do componente em vez de mostrar o ID
     // alfanumérico opaco do Drive como se fosse um caminho legível.
     driveFolder: asString(row.drive_path, ""),
-    processIds: []
+    processIds: [],
+    notes: asString(row.anotacoes, "")
   };
 }
 
@@ -223,7 +224,8 @@ export function mapClienteToDb(
     data_ativacao: asDbDate(client.activationDate),
     data_finalizacao: asDbDate(client.finalizationDate),
     drive_folder_id: client.driveFolderId ?? null,
-    drive_path: client.driveFolder || null
+    drive_path: client.driveFolder || null,
+    anotacoes: client.notes || null
   };
 }
 

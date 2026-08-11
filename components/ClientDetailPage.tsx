@@ -35,6 +35,7 @@ export function ClientDetailPage({ clientId }: ClientDetailPageProps) {
     getClientById,
     getProcessesByClientId,
     updateClient,
+    updateClientNotes,
     updateClientStatus,
     refreshClient,
     showToast,
@@ -47,6 +48,8 @@ export function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [localDriveFolderId, setLocalDriveFolderId] = useState<string | null | undefined>(undefined);
   const [pendingStatus, setPendingStatus] = useState<ClientStatus | null>(null);
+  const [notes, setNotes] = useState<string | null>(null);
+  const [isSavingNotes, setIsSavingNotes] = useState(false);
 
   const client = getClientById(clientId);
 
@@ -70,6 +73,20 @@ export function ClientDetailPage({ clientId }: ClientDetailPageProps) {
         />
       </PageShell>
     );
+  }
+
+  const currentNotes = notes ?? client.notes;
+  const notesChanged = currentNotes !== client.notes;
+
+  async function handleSaveNotes() {
+    if (!notesChanged) return;
+    setIsSavingNotes(true);
+    try {
+      await updateClientNotes(client!.id, currentNotes);
+      setNotes(null);
+    } finally {
+      setIsSavingNotes(false);
+    }
   }
 
   const processes = getProcessesByClientId(client.id);
@@ -220,6 +237,22 @@ export function ClientDetailPage({ clientId }: ClientDetailPageProps) {
                 { label: "% de Honorário ao Parceiro", value: client.partnerFee }
               ]}
             />
+          </SectionCard>
+
+          <SectionCard title="Observações" description="Anotações internas sobre o cliente.">
+            <textarea
+              className="min-h-32 w-full resize-y rounded-md border border-slate-200 bg-white p-3 text-sm text-slate-800 outline-none focus:border-navy-700 focus:ring-2 focus:ring-navy-700/15 sm:min-h-40"
+              value={currentNotes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Registre observações internas sobre o cliente..."
+            />
+            {notesChanged && (
+              <div className="mt-2 flex justify-end">
+                <Button onClick={handleSaveNotes} disabled={isSavingNotes}>
+                  {isSavingNotes ? "Salvando..." : "Salvar observações"}
+                </Button>
+              </div>
+            )}
           </SectionCard>
 
           <SectionCard title="Processos Vinculados">

@@ -73,7 +73,8 @@ export function makeClient(values: ClientFormValues, existing?: Client): Client 
     partnerFee: values.partnerFee || "—",
     driveFolderId: existing?.driveFolderId ?? null,
     driveFolder: existing?.driveFolder ?? "",
-    processIds: existing?.processIds ?? []
+    processIds: existing?.processIds ?? [],
+    notes: existing?.notes ?? ""
   };
 }
 

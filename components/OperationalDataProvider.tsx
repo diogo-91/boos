@@ -61,6 +61,7 @@ type OperationalDataContextValue = {
   showToast: (message: string, type?: "success" | "error") => void;
   createClient: (values: ClientFormValues) => Promise<Client>;
   updateClient: (clientId: string, values: ClientFormValues) => Promise<void>;
+  updateClientNotes: (clientId: string, notes: string) => Promise<void>;
   updateClientStatus: (clientId: string, status: ClientStatus, date?: string) => Promise<void>;
   createProcess: (values: ProcessFormValues) => Promise<LegalProcess>;
   updateProcessNotes: (processId: string, notes: string) => Promise<void>;
@@ -231,6 +232,39 @@ export function OperationalDataProvider({ children }: { children: ReactNode }) {
         showToast("Cliente atualizado com sucesso.");
       } catch (error) {
         const message = getErrorMessage(error, "Erro ao atualizar cliente.");
+        showToast(message, "error");
+        throw new Error(message);
+      }
+    },
+    [clients, partners, showToast]
+  );
+
+  const updateClientNotes = useCallback(
+    async (clientId: string, notes: string): Promise<void> => {
+      const existing = clients.find((c) => c.id === clientId);
+      if (!existing) return;
+
+      const next: Client = { ...existing, notes };
+
+      if (!isSupabaseConfigured) {
+        setClients((prev) =>
+          attachPartnerNames(prev.map((c) => (c.id === clientId ? next : c)), partners)
+        );
+        showToast("Observações salvas.");
+        return;
+      }
+
+      try {
+        const saved = await atualizarCliente(next, existing.partnerId ?? null);
+        setClients((prev) =>
+          attachPartnerNames(
+            prev.map((c) => (c.id === clientId ? { ...saved, processIds: c.processIds } : c)),
+            partners
+          )
+        );
+        showToast("Observações salvas.");
+      } catch (error) {
+        const message = getErrorMessage(error, "Erro ao salvar observações.");
         showToast(message, "error");
         throw new Error(message);
       }
@@ -426,6 +460,7 @@ export function OperationalDataProvider({ children }: { children: ReactNode }) {
       showToast,
       createClient,
       updateClient,
+      updateClientNotes,
       updateClientStatus,
       createProcess,
       refreshClient,
@@ -447,6 +482,7 @@ export function OperationalDataProvider({ children }: { children: ReactNode }) {
       statusHistoryVersion,
       toast,
       updateClient,
+      updateClientNotes,
       updateClientStatus,
       updateProcessNotes,
       updateProcessStatus
