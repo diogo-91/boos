@@ -22,6 +22,7 @@ function getClientSearchIndex(client: Client, processes: LegalProcess[]) {
       client.secondaryDocument,
       client.partner,
       client.origin,
+      client.notes,
       ...linked.flatMap((process) => [
         process.number,
         process.opposingParty,
