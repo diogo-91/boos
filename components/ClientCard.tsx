@@ -19,7 +19,7 @@ export function ClientCard({ client, search = "" }: ClientCardProps) {
           <h3 className="font-semibold text-slate-950">{client.name}</h3>
           <p className="mt-1 text-sm text-slate-500">{formatDocument(client.document)}</p>
           {notesSnippet && (
-            <p className="mt-1 text-xs italic text-slate-500">Observação: "{notesSnippet}"</p>
+            <p className="mt-1 text-xs italic text-slate-500">Observação: &ldquo;{notesSnippet}&rdquo;</p>
           )}
         </div>
         <StatusBadge status={client.status} />

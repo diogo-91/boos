@@ -23,7 +23,6 @@ async function isManagedFile(fileId: string): Promise<boolean> {
   const grandParentId = parentData.parents?.[0];
 
   const candidateIds = [parentId, grandParentId].filter((v): v is string => Boolean(v));
-  if (candidateIds.length === 0) return false;
 
   const supabase = getSupabaseServiceClient();
   const [{ data: clientes }, { data: processos }] = await Promise.all([

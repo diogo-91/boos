@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { readDriveFile } from "@/services/ai-document-reader";
+import { readDriveFile, type ReadDriveFileRequestBody } from "@/services/ai-document-reader";
 
 export const runtime = "nodejs";
 
@@ -9,7 +9,7 @@ export async function POST(request: Request) {
   let parentFolderId: string | undefined;
 
   try {
-    const body = await request.json() as { fileId?: string; fileName?: string; parentFolderId?: string };
+    const body = await request.json() as ReadDriveFileRequestBody;
     ({ fileId, fileName, parentFolderId } = body);
   } catch {
     return NextResponse.json({ error: "Corpo da requisição inválido." }, { status: 400 });

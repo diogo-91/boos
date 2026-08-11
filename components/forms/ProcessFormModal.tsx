@@ -6,6 +6,7 @@ import type { ProcessFormValues } from "@/components/OperationalDataProvider";
 import { STATUS_OPTIONS } from "@/lib/domain";
 import { isValidMoney, isValidPercent } from "@/lib/validation";
 import { FormField } from "@/components/forms/FormField";
+import { FormModalFooter } from "@/components/forms/FormModalFooter";
 import {
   DateInput,
   MoneyInput,
@@ -13,7 +14,6 @@ import {
   TextareaInput,
   TextInput
 } from "@/components/forms/inputs";
-import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 
 type ProcessFormModalProps = {
@@ -121,7 +121,7 @@ export function ProcessFormModal({
           </SelectInput>
         </FormField>
 
-        <FormField label="Nº do Processo (CNJ)" error={errors.number}>
+        <FormField label="Nº do Processo (CNJ)">
           <TextInput
             value={values.number}
             onChange={(e) => updateField("number", e.target.value)}
@@ -227,14 +227,7 @@ export function ProcessFormModal({
         </div>
       </div>
 
-      <div className="flex flex-col-reverse gap-2 border-t border-slate-200 px-4 py-3 sm:flex-row sm:justify-end sm:px-5 sm:py-4">
-        <Button variant="secondary" onClick={handleClose} disabled={isSaving}>
-          Cancelar
-        </Button>
-        <Button onClick={handleSubmit} disabled={isSaving}>
-          {isSaving ? "Salvando..." : "Salvar"}
-        </Button>
-      </div>
+      <FormModalFooter onCancel={handleClose} onConfirm={handleSubmit} isSaving={isSaving} />
     </Modal>
   );
 }

@@ -11,6 +11,7 @@ import {
 import { normalizeDocument, isValidCpfCnpj } from "@/lib/validation";
 import { hojeLocalISO } from "@/lib/date-utils";
 import { parseMoneyToNumber } from "@/services/mappers";
+import { criarPastaProcesso } from "@/services/google-drive";
 
 const genAI = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
 const GEMINI_MODEL = "gemini-3.5-flash";
@@ -779,6 +780,12 @@ export type ProgressStep = "context" | "download" | "ai" | "match" | "save";
 export type ProgressStatus = "active" | "done" | "skip" | "error";
 export type ProgressEmitter = (step: ProgressStep, status: ProgressStatus, message?: string) => void;
 
+export type ReadDriveFileRequestBody = {
+  fileId?: string;
+  fileName?: string;
+  parentFolderId?: string;
+};
+
 export async function readDriveFile(
   fileId: string,
   fileName: string,
@@ -1276,7 +1283,6 @@ async function ensureProcessoFromClienteFile(
       .single();
 
     if (clienteRow?.drive_folder_id) {
-      const { criarPastaProcesso } = await import("@/services/google-drive");
       const fakeClient = {
         id: clienteId,
         driveFolderId: clienteRow.drive_folder_id,

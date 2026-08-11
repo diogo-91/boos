@@ -146,7 +146,6 @@ export async function runSheetSync(spreadsheetId: string = SHEET_ID, gid?: strin
   const rows = await readSheetRows(spreadsheetId, gid);
   result.total = rows.length;
 
-  // Carrega todos os processos e clientes do banco de uma vez
   const { data: processos } = await supabase.from("processos").select("id, numero_cnj, cliente_id, percentual_exito");
   const { data: clientes, error: clientesError } = await supabase.from("clientes").select("id, nome");
   if (clientesError) result.erros.push(`Erro clientes: ${clientesError.message}`);

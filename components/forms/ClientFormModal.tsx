@@ -8,8 +8,8 @@ import { STATUS_OPTIONS } from "@/lib/domain";
 import { findDuplicateClient } from "@/lib/client-queries";
 import { isValidCpfCnpj, isValidEmail, isValidPercent, normalizeDocument } from "@/lib/validation";
 import { FormField } from "@/components/forms/FormField";
+import { FormModalFooter } from "@/components/forms/FormModalFooter";
 import { DateInput, SelectInput, TextInput } from "@/components/forms/inputs";
-import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 
 type ClientFormModalProps = {
@@ -145,7 +145,7 @@ export function ClientFormModal({
       description="Preencha os dados operacionais do cliente."
     >
       <div className="grid gap-4 px-4 py-4 sm:px-5 sm:py-5 sm:grid-cols-2 lg:grid-cols-3">
-        <FormField label="Tipo" error={errors.personType}>
+        <FormField label="Tipo">
           <SelectInput
             value={values.personType}
             onChange={(e) => updateField("personType", e.target.value as Client["personType"])}
@@ -276,14 +276,7 @@ export function ClientFormModal({
         </div>
       )}
 
-      <div className="flex flex-col-reverse gap-2 border-t border-slate-200 px-4 py-3 sm:flex-row sm:justify-end sm:px-5 sm:py-4">
-        <Button variant="secondary" onClick={handleClose} disabled={isSaving}>
-          Cancelar
-        </Button>
-        <Button onClick={handleSubmit} disabled={isSaving}>
-          {isSaving ? "Salvando..." : "Salvar"}
-        </Button>
-      </div>
+      <FormModalFooter onCancel={handleClose} onConfirm={handleSubmit} isSaving={isSaving} />
     </Modal>
   );
 }

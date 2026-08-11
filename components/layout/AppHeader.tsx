@@ -32,7 +32,6 @@ export function AppHeader() {
     <header className="border-b border-navy-800/30 bg-navy-900 text-white">
       <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-3 sm:px-6 lg:px-8">
 
-        {/* Logo + título */}
         <Link href="/dashboard" className="flex items-center gap-3">
           <Image
             src="/logo-baz.png"
@@ -51,7 +50,6 @@ export function AppHeader() {
           </div>
         </Link>
 
-        {/* Desktop nav */}
         <nav className="hidden items-center gap-1 sm:flex">
           {NAV_LINKS.map(({ href, label, icon: Icon }) => (
             <Link
@@ -69,7 +67,6 @@ export function AppHeader() {
           ))}
         </nav>
 
-        {/* Ações direita */}
         <div className="flex items-center gap-2">
           <span className="hidden items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1.5 text-sm font-medium sm:flex">
             <span className="flex h-7 w-7 items-center justify-center rounded-full bg-white text-xs font-bold text-navy-900">
@@ -84,7 +81,6 @@ export function AppHeader() {
           >
             <LogOut size={15} />
           </button>
-          {/* Hamburguer — só mobile */}
           <button
             onClick={() => setMenuOpen((v) => !v)}
             className="flex h-9 w-9 items-center justify-center rounded-full border border-white/10 bg-white/10 text-white sm:hidden"
@@ -95,14 +91,12 @@ export function AppHeader() {
         </div>
       </div>
 
-      {/* Status de sincronização do Drive */}
       <div className="border-t border-white/10">
         <div className="mx-auto max-w-7xl px-4 py-1.5 sm:px-6 lg:px-8">
           <DriveSyncStatus textClassName="text-white/50" />
         </div>
       </div>
 
-      {/* Menu mobile dropdown */}
       {menuOpen && (
         <nav className="border-t border-white/10 bg-navy-900 px-4 pb-4 pt-2 sm:hidden">
           {NAV_LINKS.map(({ href, label, icon: Icon }) => (

@@ -353,7 +353,7 @@ export async function runFullScan(options: FullScanOptions = {}): Promise<FullSc
               if (!read.skipped && read.fieldsExtracted.length > 0) result.filesRead++;
               else if (read.skipped) result.filesSkipped++;
             } catch (err) {
-              result.errors.push(`[arquivo] ${file.name}: ${err instanceof Error ? err.message : JSON.stringify(err)}`);
+              result.errors.push(`[arquivo] ${file.name}: ${err instanceof Error ? err.message : String(err)}`);
             }
 
             if (await handleTimeoutIfNeeded(result, startedAt, statusFolder.id, clienteItem.id)) {
@@ -379,7 +379,7 @@ export async function runFullScan(options: FullScanOptions = {}): Promise<FullSc
             if (!read.skipped && read.fieldsExtracted.length > 0) result.filesRead++;
             else if (read.skipped) result.filesSkipped++;
           } catch (err) {
-            result.errors.push(`[arquivo] ${child.name}: ${err instanceof Error ? err.message : JSON.stringify(err)}`);
+            result.errors.push(`[arquivo] ${child.name}: ${err instanceof Error ? err.message : String(err)}`);
           }
 
           if (await handleTimeoutIfNeeded(result, startedAt, statusFolder.id, clienteItem.id)) {

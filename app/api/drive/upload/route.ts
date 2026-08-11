@@ -19,6 +19,21 @@ function sanitizeFileName(name: string): string {
   return safe || "arquivo";
 }
 
+// .doc/.docx liberados porque services/ai-document-reader.ts já sabe ler
+// os dois (mammoth para .docx, word-extractor para .doc) — não fazia
+// sentido bloquear no upload um tipo que o robô processa normalmente
+// depois, e boa parte das petições/peças chega nesse formato.
+const ALLOWED_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/gif",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/msword"
+];
+const MAX_SIZE_BYTES = 20 * 1024 * 1024; // 20MB
+
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
@@ -46,21 +61,6 @@ export async function POST(request: Request) {
       { status: 400 }
     );
   }
-
-  // .doc/.docx liberados porque services/ai-document-reader.ts já sabe ler
-  // os dois (mammoth para .docx, word-extractor para .doc) — não fazia
-  // sentido bloquear no upload um tipo que o robô processa normalmente
-  // depois, e boa parte das petições/peças chega nesse formato.
-  const ALLOWED_TYPES = [
-    "application/pdf",
-    "image/jpeg",
-    "image/png",
-    "image/webp",
-    "image/gif",
-    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-    "application/msword"
-  ];
-  const MAX_SIZE_BYTES = 20 * 1024 * 1024; // 20MB
 
   if (!ALLOWED_TYPES.includes(file.type)) {
     return NextResponse.json(

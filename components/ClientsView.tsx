@@ -168,7 +168,7 @@ export function ClientsView() {
                       <p className="mt-1 text-xs text-slate-500">{formatDocument(client.document)}</p>
                       {notesSnippet && (
                         <p className="mt-1 text-xs italic text-slate-500">
-                          Observação: "{notesSnippet}"
+                          Observação: &ldquo;{notesSnippet}&rdquo;
                         </p>
                       )}
                     </div>

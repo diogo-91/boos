@@ -3,8 +3,8 @@
 import { useState } from "react";
 import { todayInputValue } from "@/lib/date-utils";
 import { FormField } from "@/components/forms/FormField";
+import { FormModalFooter } from "@/components/forms/FormModalFooter";
 import { DateInput } from "@/components/forms/inputs";
-import { Button } from "@/components/ui/Button";
 import { Modal } from "@/components/ui/Modal";
 
 type StatusChangeModalProps = {
@@ -43,14 +43,7 @@ export function StatusChangeModal({
           <DateInput value={date} onChange={(e) => setDate(e.target.value)} />
         </FormField>
       </div>
-      <div className="flex flex-col-reverse gap-2 border-t border-slate-200 px-4 py-3 sm:flex-row sm:justify-end sm:px-5 sm:py-4">
-        <Button variant="secondary" onClick={onClose} disabled={isSaving}>
-          Cancelar
-        </Button>
-        <Button onClick={handleConfirm} disabled={isSaving}>
-          {isSaving ? "Salvando..." : "Salvar"}
-        </Button>
-      </div>
+      <FormModalFooter onCancel={onClose} onConfirm={handleConfirm} isSaving={isSaving} />
     </Modal>
   );
 }

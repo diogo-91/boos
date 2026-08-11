@@ -19,8 +19,6 @@ import { formatDocument } from "@/lib/client-view-model";
 import { parseBRDate } from "@/lib/date-utils";
 import { StatusBadge } from "@/components/StatusBadge";
 
-// ── Helpers ──────────────────────────────────────────────────────────────────
-
 function pct(value: number, total: number) {
   if (!total) return 0;
   return Math.round((value / total) * 100);
@@ -51,8 +49,6 @@ function statusDisplayOrder(byStatus: Record<string, number>) {
   );
   return [...STATUS_OPTIONS, ...legacy];
 }
-
-// ── Sub-components ────────────────────────────────────────────────────────────
 
 function KpiCard({
   label,
@@ -112,13 +108,10 @@ function BarRow({ label, count, total, color }: { label: string; count: number; 
   );
 }
 
-// ── Main Dashboard ────────────────────────────────────────────────────────────
-
 export function DashboardView() {
   const { clients, processes, isLoading } = useOperationalData();
 
   const stats = useMemo(() => {
-    // ── Clientes por status ──────────────────────────────────────────────────
     const clientsByStatus: Record<string, number> = {};
     for (const c of clients) {
       clientsByStatus[c.status] = (clientsByStatus[c.status] ?? 0) + 1;
@@ -126,20 +119,17 @@ export function DashboardView() {
 
     const ativos = clientsByStatus["Ativo"] ?? 0;
 
-    // ── Processos por status ─────────────────────────────────────────────────
     const processosByStatus: Record<string, number> = {};
     for (const p of processes) {
       processosByStatus[p.status] = (processosByStatus[p.status] ?? 0) + 1;
     }
 
-    // ── Processos por modelo de cobrança ─────────────────────────────────────
     const byBilling: Record<string, number> = {};
     for (const p of processes) {
       const m = p.billingModel || "Não definido";
       byBilling[m] = (byBilling[m] ?? 0) + 1;
     }
 
-    // ── Parceiros ────────────────────────────────────────────────────────────
     const parceiroMap: Record<string, number> = {};
     for (const c of clients) {
       if (c.partner && c.partner !== "Nenhum" && c.partner !== "—") {
@@ -150,13 +140,9 @@ export function DashboardView() {
       .sort((a, b) => b[1] - a[1])
       .slice(0, 5);
 
-    // ── Clientes sem processo ─────────────────────────────────────────────────
     const semProcesso = clients.filter(c => c.processIds.length === 0).length;
-
-    // ── Clientes com Drive vinculado ─────────────────────────────────────────
     const comDrive = clients.filter(c => c.driveFolderId).length;
 
-    // ── Processos recentes ──────────────────────────────────────────────────
     // processos ganhou data_cadastro (migration 2026-08-04) — processos
     // criados antes da migration não têm esse valor preenchido e caem pro
     // fim da lista (data desconhecida), mas tudo criado a partir de agora
@@ -169,7 +155,6 @@ export function DashboardView() {
       })
       .slice(0, 8);
 
-    // ── Clientes recentes ─────────────────────────────────────────────────────
     // clientes tem data_cadastro — ordena por ela de verdade em vez do
     // slice(-6) sobre a lista alfabética (que listarClientes usa por padrão).
     const recentClients = [...clients]
@@ -207,8 +192,6 @@ export function DashboardView() {
 
   return (
     <section className="space-y-4 sm:space-y-6">
-
-      {/* ── KPIs principais ─────────────────────────────────────────────── */}
       <div className="grid grid-cols-2 gap-2 sm:gap-3 sm:grid-cols-3">
         <KpiCard
           label="Total de Clientes"
@@ -233,10 +216,7 @@ export function DashboardView() {
         />
       </div>
 
-      {/* ── Linha 2: Status clientes + Status processos ──────────────────── */}
       <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
-
-        {/* Status dos clientes */}
         <Card>
           <div className="mb-4 flex items-center justify-between">
             <SectionTitle>Clientes por Status</SectionTitle>
@@ -255,7 +235,6 @@ export function DashboardView() {
           </div>
         </Card>
 
-        {/* Status dos processos */}
         <Card>
           <div className="mb-4 flex items-center justify-between">
             <SectionTitle>Processos por Status</SectionTitle>
@@ -294,10 +273,7 @@ export function DashboardView() {
         </Card>
       </div>
 
-      {/* ── Linha 3: Top parceiros + Indicadores rápidos ────────────────── */}
       <div className="grid gap-3 sm:gap-4 lg:grid-cols-3">
-
-        {/* Top parceiros por indicações */}
         <Card>
           <SectionTitle>Top Parceiros por Indicações</SectionTitle>
           {stats.topParceiros.length === 0 ? (
@@ -317,7 +293,6 @@ export function DashboardView() {
           )}
         </Card>
 
-        {/* Indicadores rápidos */}
         <Card className="lg:col-span-2">
           <SectionTitle>Indicadores Rápidos</SectionTitle>
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
@@ -378,10 +353,7 @@ export function DashboardView() {
         </Card>
       </div>
 
-      {/* ── Linha 4: Últimos clientes + Últimos processos ────────────────── */}
       <div className="grid gap-3 sm:gap-4 lg:grid-cols-2">
-
-        {/* Últimos clientes cadastrados */}
         <Card>
           <div className="mb-4 flex items-center justify-between">
             <SectionTitle>Últimos Clientes Cadastrados</SectionTitle>
@@ -410,7 +382,6 @@ export function DashboardView() {
           )}
         </Card>
 
-        {/* Últimos processos */}
         <Card>
           <div className="mb-4 flex items-center justify-between">
             <SectionTitle>Últimos Processos</SectionTitle>

@@ -1,16 +1,16 @@
 import { NextResponse } from "next/server";
-import { readDriveFile } from "@/services/ai-document-reader";
+import { readDriveFile, type ReadDriveFileRequestBody } from "@/services/ai-document-reader";
 import { isValidSyncSecret } from "@/lib/sync-auth";
 
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
   if (!isValidSyncSecret(request)) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    return NextResponse.json({ error: "Não autorizado." }, { status: 401 });
   }
 
   try {
-    const body = await request.json() as { fileId?: string; fileName?: string; parentFolderId?: string };
+    const body = await request.json() as ReadDriveFileRequestBody;
     const { fileId, fileName, parentFolderId } = body;
 
     if (!fileId || !fileName || !parentFolderId) {

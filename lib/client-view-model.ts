@@ -1,10 +1,6 @@
 import type { Client, LegalProcess } from "@/lib/types";
 import { formatCountLabel, joinNonEmpty } from "@/lib/domain";
 
-export function getClientProcessCount(client: Client) {
-  return client.processIds.length;
-}
-
 export function getPartnerLabel(client: Client) {
   if (client.partner === "Nenhum" || client.partnerFee === "—" || client.partnerFee === "-") {
     return "—";
@@ -29,7 +25,7 @@ export function getClientSubtitle(client: Client) {
 }
 
 export function getProcessCountLabel(client: Client) {
-  const count = getClientProcessCount(client);
+  const count = client.processIds.length;
   return count === 0
     ? "Sem processo ainda"
     : formatCountLabel(count, "processo", "processos");
