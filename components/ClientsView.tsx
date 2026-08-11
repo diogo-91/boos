@@ -7,6 +7,7 @@ import { ClientFormModal } from "@/components/forms/ClientFormModal";
 import { ProcessFormModal } from "@/components/forms/ProcessFormModal";
 import {
   filterClients,
+  getNotesMatchSnippet,
   uniqueBillingModels,
   uniquePartners
 } from "@/lib/client-queries";
@@ -159,12 +160,20 @@ export function ClientsView() {
               {
                 key: "client",
                 header: "Cliente",
-                render: (client) => (
-                  <div>
-                    <p className="font-semibold text-slate-950">{client.name}</p>
-                    <p className="mt-1 text-xs text-slate-500">{formatDocument(client.document)}</p>
-                  </div>
-                )
+                render: (client) => {
+                  const notesSnippet = getNotesMatchSnippet(client.notes, search);
+                  return (
+                    <div>
+                      <p className="font-semibold text-slate-950">{client.name}</p>
+                      <p className="mt-1 text-xs text-slate-500">{formatDocument(client.document)}</p>
+                      {notesSnippet && (
+                        <p className="mt-1 text-xs italic text-slate-500">
+                          Observação: "{notesSnippet}"
+                        </p>
+                      )}
+                    </div>
+                  );
+                }
               },
               {
                 key: "status",
@@ -208,7 +217,7 @@ export function ClientsView() {
           />
         ) : filteredClients.length > 0
           ? filteredClients.map((client) => (
-              <ClientCard key={client.id} client={client} />
+              <ClientCard key={client.id} client={client} search={search} />
             ))
           : emptyState}
       </div>

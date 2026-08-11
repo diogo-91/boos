@@ -1,19 +1,26 @@
 import Link from "next/link";
 import type { Client } from "@/lib/types";
 import { formatDocument, getPartnerLabel, getProcessCountLabel } from "@/lib/client-view-model";
+import { getNotesMatchSnippet } from "@/lib/client-queries";
 import { StatusBadge } from "@/components/StatusBadge";
 
 type ClientCardProps = {
   client: Client;
+  search?: string;
 };
 
-export function ClientCard({ client }: ClientCardProps) {
+export function ClientCard({ client, search = "" }: ClientCardProps) {
+  const notesSnippet = getNotesMatchSnippet(client.notes, search);
+
   return (
     <article className="rounded-lg border border-slate-200 bg-white p-3 shadow-soft sm:p-4">
       <div className="flex items-start justify-between gap-2 sm:gap-3">
         <div>
           <h3 className="font-semibold text-slate-950">{client.name}</h3>
           <p className="mt-1 text-sm text-slate-500">{formatDocument(client.document)}</p>
+          {notesSnippet && (
+            <p className="mt-1 text-xs italic text-slate-500">Observação: "{notesSnippet}"</p>
+          )}
         </div>
         <StatusBadge status={client.status} />
       </div>

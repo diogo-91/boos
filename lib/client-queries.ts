@@ -2,6 +2,27 @@ import type { Client, LegalProcess } from "@/lib/types";
 import { CLIENT_STATUS_MAP, normalizeText } from "@/lib/domain";
 import { normalizeDocument } from "@/lib/validation";
 
+// Quando a busca só bate no texto livre da observação, o resultado aparece
+// na lista sem nenhum indício do motivo (nome/CPF/parceiro não mudam) — o
+// usuário vê o cliente mas não sabe por quê. Isso extrai um trecho ao redor
+// do termo encontrado pra mostrar esse contexto junto do resultado.
+export function getNotesMatchSnippet(notes: string, search: string, radius = 36): string | null {
+  const trimmedNotes = notes.trim();
+  const trimmedSearch = search.trim();
+  if (!trimmedNotes || !trimmedSearch) return null;
+
+  const normalizedNotes = normalizeText(trimmedNotes);
+  const normalizedSearch = normalizeText(trimmedSearch);
+  const index = normalizedNotes.indexOf(normalizedSearch);
+  if (index === -1) return null;
+
+  const start = Math.max(0, index - radius);
+  const end = Math.min(trimmedNotes.length, index + normalizedSearch.length + radius);
+  const prefix = start > 0 ? "…" : "";
+  const suffix = end < trimmedNotes.length ? "…" : "";
+  return `${prefix}${trimmedNotes.slice(start, end).trim()}${suffix}`;
+}
+
 export type ClientFilterState = {
   search: string;
   clientStatus: string;
