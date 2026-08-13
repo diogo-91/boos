@@ -1,6 +1,6 @@
 import type { ClientStatus } from "@/lib/types";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { STATUS_DB_MAP, folderNameToDisplayName, parseProcessFolderName } from "@/lib/drive-status-map";
+import { STATUS_DB_MAP, datasDeTransicao, folderNameToDisplayName, parseProcessFolderName } from "@/lib/drive-status-map";
 import { hojeLocalISO } from "@/lib/date-utils";
 
 export type DriveClienteRecord = { id: string; nome: string; drive_path: string; status: string };
@@ -112,22 +112,26 @@ export async function updateClienteStatusFromFolder(
   statusFolderName: string,
   folderName: string
 ) {
+  // Qualquer mudança na pasta (inclusive rename) chega aqui — as datas de
+  // ciclo de vida só podem ser gravadas quando o STATUS de fato mudou,
+  // senão renomear a pasta de um ativo reseta a data_ativacao pra hoje.
+  // A decisão mora em datasDeTransicao (lib), que também trata "audiencia"
+  // como subestado de ativo para o eco do Drive não reverter a marcação.
+  const existing = await findClienteByDriveFolderId(folderId);
+  if (!existing) return;
+
+  const datas = datasDeTransicao(existing.status, status, hojeLocalISO());
+  const houveTransicao = Object.keys(datas).length > 0;
+
   const { error } = await getSupabaseServiceClient()
     .from("clientes")
     .update({
-      status: STATUS_DB_MAP[status],
+      // Status só em transição real (datasDeTransicao já normaliza
+      // "audiencia" como subestado de ativo) — senão o eco de um rename
+      // reverteria a marcação de Audiência para "ativo".
+      status: houveTransicao ? STATUS_DB_MAP[status] : undefined,
       drive_path: `${statusFolderName} › ${folderName}`,
-      data_ativacao: status === "Ativo" ? hojeLocalISO() : undefined,
-      // undefined = "não mexe" pro Supabase — por isso reativar (voltar pra
-      // Ativo) precisa mandar null explicitamente pra limpar uma
-      // data_finalizacao antiga, senão o registro fica ativo com data de
-      // finalização preenchida.
-      data_finalizacao:
-        status === "Arquivado" || status === "Cancelado"
-          ? hojeLocalISO()
-          : status === "Ativo"
-            ? null
-            : undefined
+      ...datas
     })
     .eq("drive_folder_id", folderId);
 

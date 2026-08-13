@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { isReservedClientSubfolder, matchStatusFolderKey } from "./drive-status-map.ts";
+import { datasDeTransicao, isReservedClientSubfolder, matchStatusFolderKey } from "./drive-status-map.ts";
 
 test("isReservedClientSubfolder — reconhece variações com/sem acento, maiúscula e espaço/underscore", () => {
   for (const name of [
@@ -39,4 +39,21 @@ test("matchStatusFolderKey — acha a chave ignorando maiúsculas/espaços (cont
   // underscore — "07 Sarandi" (sem underscore) não bate mais com a chave
   // "07_sarandi".
   assert.equal(matchStatusFolderKey("07 Sarandi"), undefined);
+});
+
+test("datasDeTransicao — rename sem transição não toca data nenhuma", () => {
+  assert.deepEqual(datasDeTransicao("ativo", "Ativo", "2026-08-13"), {});
+  assert.deepEqual(datasDeTransicao("arquivado", "Arquivado", "2026-08-13"), {});
+  // audiencia é subestado de ativo — eco do Drive (pasta em 02_ativos) não é transição
+  assert.deepEqual(datasDeTransicao("audiencia", "Ativo", "2026-08-13"), {});
+});
+
+test("datasDeTransicao — transições reais gravam as datas certas", () => {
+  assert.equal(datasDeTransicao("contratacao", "Ativo", "2026-08-13").data_ativacao, "2026-08-13");
+  assert.equal(datasDeTransicao("ativo", "Arquivado", "2026-08-13").data_finalizacao, "2026-08-13");
+  assert.equal(datasDeTransicao("ativo", "Arquivado", "2026-08-13").data_ativacao, undefined);
+  // reativação limpa a finalização com null explícito
+  assert.equal(datasDeTransicao("arquivado", "Ativo", "2026-08-13").data_finalizacao, null);
+  // audiencia movida de verdade para arquivados É transição
+  assert.equal(datasDeTransicao("audiencia", "Arquivado", "2026-08-13").data_finalizacao, "2026-08-13");
 });

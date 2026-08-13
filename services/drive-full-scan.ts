@@ -4,7 +4,6 @@ import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { readDriveFile, getProcessedFileModifiedTimeMap } from "@/services/ai-document-reader";
 import {
   FOLDER_MIME,
-  STATUS_DB_MAP,
   STATUS_FOLDER_MAP,
   isReservedClientSubfolder,
   matchStatusFolderKey
@@ -90,23 +89,19 @@ async function ensureCliente(
 ): Promise<{ id: string; nome: string; drive_path: string; created: boolean }> {
   const existing = await findClienteByDriveFolderId(folderId);
   if (existing) {
-    // A varredura completa só criava clientes novos — se a pasta de um
-    // cliente já cadastrado for movida manualmente pro Drive pra outra
-    // pasta de status, o status no banco ficava desatualizado até a
-    // sincronização incremental (que roda de tempos em tempos) passar por
-    // ali. Reconcilia aqui também, do mesmo jeito que
-    // updateClienteStatusFromFolder já faz pro caminho incremental.
-    const expectedDbStatus = STATUS_DB_MAP[status];
-    if (existing.status !== expectedDbStatus) {
-      await updateClienteStatusFromFolder(folderId, status, statusFolderName, folderName);
-      return {
-        id: existing.id,
-        nome: existing.nome,
-        drive_path: `${statusFolderName} › ${folderName}`,
-        created: false
-      };
-    }
-    return { ...existing, created: false };
+    // Reconcilia status E drive_path incondicionalmente — a guarda de datas
+    // (e de reversão de "audiencia") mora dentro de
+    // updateClienteStatusFromFolder. Sem a chamada incondicional, um rename
+    // de pasta sem mudança de status nunca atualizaria o drive_path pela
+    // varredura completa, e o path velho contaminaria processos criados
+    // depois a partir dele.
+    await updateClienteStatusFromFolder(folderId, status, statusFolderName, folderName);
+    return {
+      id: existing.id,
+      nome: existing.nome,
+      drive_path: `${statusFolderName} › ${folderName}`,
+      created: false
+    };
   }
 
   const { cliente, created } = await linkOrCreateClienteFromFolder(

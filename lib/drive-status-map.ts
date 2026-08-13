@@ -81,6 +81,25 @@ export function isReservedClientSubfolder(name: string): boolean {
   );
 }
 
+// Decide quais datas de ciclo de vida gravar quando um evento de pasta
+// chega para um cliente. Retorna {} quando não houve transição de status —
+// rename e re-varredura não podem resetar data histórica. "audiencia" é
+// subestado de ativo (não tem pasta própria), então não conta como transição.
+export function datasDeTransicao(
+  statusAtual: string | undefined,
+  status: ClientStatus,
+  hoje: string
+): { data_ativacao?: string; data_finalizacao?: string | null } {
+  const novo = STATUS_DB_MAP[status];
+  const atual = statusAtual === "audiencia" ? "ativo" : statusAtual;
+  if (atual === novo) return {};
+  return {
+    data_ativacao: status === "Ativo" ? hoje : undefined,
+    data_finalizacao:
+      status === "Arquivado" || status === "Cancelado" ? hoje : status === "Ativo" ? null : undefined
+  };
+}
+
 // Casa o nome de uma pasta do Drive com a chave correspondente em
 // STATUS_FOLDER_MAP, ignorando maiúsculas/minúsculas e espaços.
 export function matchStatusFolderKey(folderName: string): string | undefined {
