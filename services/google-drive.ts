@@ -4,7 +4,7 @@ import {
   getGoogleDriveRootFolderId
 } from "@/lib/google/drive";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
-import { FOLDER_MIME } from "@/lib/drive-status-map";
+import { CLIENT_SUBFOLDER_NAMES, FOLDER_MIME, PROCESS_SUBFOLDER_NAMES } from "@/lib/drive-status-map";
 
 const STATUS_FOLDER_NAMES: Record<string, string> = {
   arquivado: "01_arquivados",
@@ -132,8 +132,9 @@ function buildProcessFolderName(process: LegalProcess) {
 }
 
 async function createDefaultClientStructure(clientFolderId: string) {
-  await findOrCreateFolder("documentos_pessoais", clientFolderId);
-  await findOrCreateFolder("comunicacao", clientFolderId);
+  for (const name of CLIENT_SUBFOLDER_NAMES) {
+    await findOrCreateFolder(name, clientFolderId);
+  }
 }
 
 async function findClienteOwningFolder(folderId: string): Promise<string | null> {
@@ -147,8 +148,9 @@ async function findClienteOwningFolder(folderId: string): Promise<string | null>
 }
 
 async function createDefaultProcessStructure(processFolderId: string) {
-  await findOrCreateFolder("inicial", processFolderId);
-  await findOrCreateFolder("peticoes_subsequentes", processFolderId);
+  for (const name of PROCESS_SUBFOLDER_NAMES) {
+    await findOrCreateFolder(name, processFolderId);
+  }
 }
 
 export async function criarPastaCliente(client: Client) {

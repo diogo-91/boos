@@ -2,7 +2,13 @@ import type { ClientStatus } from "@/lib/types";
 import { getGoogleDriveClient, getGoogleDriveRootFolderId } from "@/lib/google/drive";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { readDriveFile, getProcessedFileModifiedTimeMap } from "@/services/ai-document-reader";
-import { FOLDER_MIME, STATUS_DB_MAP, STATUS_FOLDER_MAP, matchStatusFolderKey } from "@/lib/drive-status-map";
+import {
+  FOLDER_MIME,
+  STATUS_DB_MAP,
+  STATUS_FOLDER_MAP,
+  isReservedClientSubfolder,
+  matchStatusFolderKey
+} from "@/lib/drive-status-map";
 import {
   createProcessoFromFolder,
   findClienteByDriveFolderId,
@@ -141,6 +147,7 @@ export type FullScanResult = {
   processosCreated: number;
   filesRead: number;
   filesSkipped: number;
+  subpastasReservadasPuladas: number;
   fileDetails: FileReadDetail[];
   errors: string[];
   timedOut: boolean;
@@ -201,6 +208,7 @@ export async function runFullScan(options: FullScanOptions = {}): Promise<FullSc
     processosCreated: 0,
     filesRead: 0,
     filesSkipped: 0,
+    subpastasReservadasPuladas: 0,
     fileDetails: [],
     errors: [],
     timedOut: false,
@@ -308,23 +316,29 @@ export async function runFullScan(options: FullScanOptions = {}): Promise<FullSc
 
       for (const child of clienteChildren) {
         if (child.mimeType === FOLDER_MIME) {
-          // Subpasta = processo
-          result.processosFound++;
-          try {
-            const created = await ensureProcesso(
-              child.id,
-              child.name,
-              cliente.id,
-              cliente.drive_path
-            );
-            if (created) result.processosCreated++;
-          } catch (err) {
-            result.errors.push(`[processo] ${child.name}: ${err instanceof Error ? err.message : String(err)}`);
+          // Subpasta reservada (documentos_pessoais, comunicacao etc.) é
+          // criada pelo próprio app, nunca representa um processo — só os
+          // arquivos dentro dela seguem lidos normalmente, abaixo.
+          if (!isReservedClientSubfolder(child.name)) {
+            result.processosFound++;
+            try {
+              const created = await ensureProcesso(
+                child.id,
+                child.name,
+                cliente.id,
+                cliente.drive_path
+              );
+              if (created) result.processosCreated++;
+            } catch (err) {
+              result.errors.push(`[processo] ${child.name}: ${err instanceof Error ? err.message : String(err)}`);
+            }
+          } else {
+            result.subpastasReservadasPuladas++;
           }
 
-          // Lê arquivos dentro da pasta do processo — mesma guarda de
-          // volume da pasta do cliente, pro mesmo problema não se repetir
-          // um nível abaixo.
+          // Lê arquivos dentro da pasta (processo ou subpasta reservada) —
+          // mesma guarda de volume da pasta do cliente, pro mesmo problema
+          // não se repetir um nível abaixo.
           const processoChildren = await listChildren(child.id);
           if (processoChildren.length > LARGE_CLIENT_ITEM_THRESHOLD) {
             result.errors.push(

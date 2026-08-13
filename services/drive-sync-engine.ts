@@ -2,7 +2,7 @@ import type { ClientStatus } from "@/lib/types";
 import { getGoogleDriveClient, getGoogleDriveRootFolderId, getGoogleSharedDriveId } from "@/lib/google/drive";
 import { getSupabaseServiceClient } from "@/lib/supabase/service";
 import { readDriveFile } from "@/services/ai-document-reader";
-import { FOLDER_MIME, STATUS_FOLDER_MAP, matchStatusFolderKey } from "@/lib/drive-status-map";
+import { FOLDER_MIME, STATUS_FOLDER_MAP, isReservedClientSubfolder, matchStatusFolderKey } from "@/lib/drive-status-map";
 import {
   createProcessoFromFolder,
   findClienteByDriveFolderId,
@@ -96,6 +96,7 @@ export type SyncResult = {
   processosCreated: number;
   statusUpdated: number;
   filesRead: number;
+  subpastasReservadasPuladas: number;
   errors: string[];
 };
 
@@ -106,6 +107,7 @@ export async function runDriveSync(): Promise<SyncResult> {
     processosCreated: 0,
     statusUpdated: 0,
     filesRead: 0,
+    subpastasReservadasPuladas: 0,
     errors: []
   };
 
@@ -157,7 +159,7 @@ export async function runDriveSync(): Promise<SyncResult> {
 
     for (const change of changesData.changes ?? []) {
       const file = change.file;
-      if (!file?.id || file.trashed || change.removed) continue;
+      if (!file?.id || !file.name || file.trashed || change.removed) continue;
 
       const isFolder = file.mimeType === FOLDER_MIME;
       const parentId = file.parents?.[0];
@@ -167,7 +169,7 @@ export async function runDriveSync(): Promise<SyncResult> {
 
       if (!isFolder) {
         try {
-          const readResult = await readDriveFile(file.id, file.name!, parentId);
+          const readResult = await readDriveFile(file.id, file.name, parentId);
           if (!readResult.skipped && readResult.fieldsExtracted.length > 0) {
             result.filesRead++;
           }
@@ -187,22 +189,32 @@ export async function runDriveSync(): Promise<SyncResult> {
           if (!existing) {
             const { created } = await linkOrCreateClienteFromFolder(
               file.id,
-              file.name!,
+              file.name,
               status,
               statusFolderName
             );
             if (created) result.clientesCreated++;
           } else {
-            await updateClienteStatusFromFolder(file.id, status, statusFolderName, file.name!);
+            await updateClienteStatusFromFolder(file.id, status, statusFolderName, file.name);
             result.statusUpdated++;
           }
         } else {
+          // Subpasta reservada (documentos_pessoais, comunicacao etc.),
+          // criada pelo próprio app dentro da pasta de cliente — não é
+          // processo. Checa antes de gastar um files.get em getFileParentId:
+          // os dois caminhos terminam em continue, então checar primeiro
+          // evita a chamada de rede quando o nome já resolve o caso.
+          if (isReservedClientSubfolder(file.name)) {
+            result.subpastasReservadasPuladas++;
+            continue;
+          }
+
           const grandParentId = await getFileParentId(parentId);
           if (!grandParentId || !statusFolderIdSet.has(grandParentId)) continue;
 
           const existing = await findProcessoByDriveFolderId(file.id);
           if (!existing) {
-            await criarProcessoAutomatico(file.id, file.name!, parentId);
+            await criarProcessoAutomatico(file.id, file.name, parentId);
             result.processosCreated++;
           }
         }

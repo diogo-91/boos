@@ -6,7 +6,9 @@ import {
   FOLDER_MIME,
   STATUS_FOLDER_TO_DB_MAP,
   folderNameToDisplayName,
-  matchStatusFolderKey
+  isReservedClientSubfolder,
+  matchStatusFolderKey,
+  normalizeReservedFolderKey
 } from "@/lib/drive-status-map";
 import { normalizeDocument, isValidCpfCnpj } from "@/lib/validation";
 import { hojeLocalISO } from "@/lib/date-utils";
@@ -65,11 +67,14 @@ const QUALIFICATION_FIELDS = ["nome", "estado_civil", "endereco", "rg_ie", "data
 
 function detectDocumentType(fileName: string, folderPath: string): DocumentType {
   const name = fileName.toLowerCase();
-  const path = folderPath.toLowerCase();
+  // Mesmo normalizador de isReservedClientSubfolder — sem ele, "Documentos
+  // Pessoais" (com espaço e maiúsculas, como o app realmente nomeia a
+  // pasta) não batia com o substring "documentos_pessoais" abaixo.
+  const path = normalizeReservedFolderKey(folderPath);
 
   if (name.includes("procuracao") || name.includes("procuração")) return "procuracao";
   if (name.includes("contrato_honorarios") || name.includes("contrato de honorários") || name.includes("contrato honorarios") || name.includes("contrato honorários")) return "contrato_honorarios";
-  if (path.includes("documentos_pessoais")) return "documento_pessoal";
+  if (path.includes("documentospessoais")) return "documento_pessoal";
   if (path.includes("inicial")) return "documento_inicial";
 
   // Detecta documento pessoal pelo nome do arquivo
@@ -849,6 +854,12 @@ export async function readDriveFile(
 
   let clientFolderId: string | null = null;
   let folderContext = fileName;
+  // true quando o arquivo está dentro de uma subpasta reservada do cliente
+  // (documentos_pessoais, comunicacao, outros, inicial, peticoes_subsequentes
+  // soltas direto na pasta do cliente) — nesse caso o parent real do
+  // arquivo é essa subpasta, não a pasta do cliente. Usado abaixo para não
+  // deixar esses arquivos criarem/atualizarem processo por engano.
+  let parentIsReservedSubfolder = false;
 
   if (statusMap[parentFolderId]) {
     result.skipped = true;
@@ -882,6 +893,7 @@ export async function readDriveFile(
     // qualquer outra) em vez de assumir sempre "documentos_pessoais".
     const realSubfolderName = (await getFolderName(parentFolderId)) ?? "documentos_pessoais";
     folderContext = `${realSubfolderName}/${fileName}`;
+    parentIsReservedSubfolder = isReservedClientSubfolder(realSubfolderName);
   }
 
   // Nem processo nem pasta de cliente reconhecidos — não gasta download nem
@@ -1159,7 +1171,13 @@ export async function readDriveFile(
     // processo certo — ensureProcessoFromClienteFile só CRIA processo novo
     // para documento_inicial (ver função), então incluir "outro" aqui não
     // arrisca criar processo a partir de um documento qualquer.
-    if (docType === "documento_inicial" || docType === "contrato_honorarios" || docType === "outro") {
+    // Exceto se o arquivo está dentro de uma subpasta reservada
+    // (documentos_pessoais, comunicacao, outros, inicial,
+    // peticoes_subsequentes soltas na pasta do cliente): nesse caso o
+    // processo "achado" por ensureProcessoFromClienteFile pode ser um
+    // processo real do cliente, e sobrescrever seus campos ou criar um
+    // processo "A definir" a partir de um documento pessoal seria errado.
+    if (!parentIsReservedSubfolder && (docType === "documento_inicial" || docType === "contrato_honorarios" || docType === "outro")) {
       const processId = await ensureProcessoFromClienteFile(clientId, extracted, docType);
       if (processId) {
         result.processId = processId;
