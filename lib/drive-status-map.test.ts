@@ -1,6 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { datasDeTransicao, isReservedClientSubfolder, matchStatusFolderKey } from "./drive-status-map.ts";
+import {
+  datasDeTransicao,
+  isReservedClientSubfolder,
+  isReservedProcessSubfolder,
+  matchStatusFolderKey
+} from "./drive-status-map.ts";
 
 test("isReservedClientSubfolder — reconhece variações com/sem acento, maiúscula e espaço/underscore", () => {
   for (const name of [
@@ -29,6 +34,15 @@ test("isReservedClientSubfolder — não casa nome de pasta que não é reservad
     "whatsapp"
   ]) {
     assert.equal(isReservedClientSubfolder(name), false, `esperava false para "${name}"`);
+  }
+});
+
+test("isReservedProcessSubfolder — só casa as subpastas de processo, não as de cliente", () => {
+  for (const name of ["inicial", "Inicial", "Petições Subsequentes", "PETICOES_SUBSEQUENTES"]) {
+    assert.equal(isReservedProcessSubfolder(name), true, `esperava true para "${name}"`);
+  }
+  for (const name of ["documentos_pessoais", "Comunicação", "outros", "Protocolo Inicial"]) {
+    assert.equal(isReservedProcessSubfolder(name), false, `esperava false para "${name}"`);
   }
 });
 

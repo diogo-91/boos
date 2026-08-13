@@ -3,9 +3,18 @@
 import { useEffect, useState } from "react";
 import { FileText, Folder, Loader2 } from "lucide-react";
 import type { DriveFile } from "@/app/api/drive/arquivos/route";
+import { folderNameToDisplayName } from "@/lib/drive-status-map";
 
 type DriveFileListProps = {
   folderId?: string | null;
+  // Também lista os arquivos de subpastas diretas reservadas (documentos
+  // pessoais/comunicação/outros no cliente, inicial/petições subsequentes
+  // no processo), agrupados por subpasta — ver app/api/drive/arquivos/route.ts.
+  includeSubpastas?: boolean;
+  // Muda esse valor (ex: incrementando um contador) pra forçar recarregar a
+  // lista sem depender de folderId mudar — usado pelo chamador depois de um
+  // upload feito via DriveBrowser, que não altera folderId nem includeSubpastas.
+  refreshKey?: number;
 };
 
 const FOLDER_MIME = "application/vnd.google-apps.folder";
@@ -22,7 +31,7 @@ function getFileTypeLabel(mimeType: string, name: string): string {
   return ext && ext.length <= 4 ? ext : "ARQ";
 }
 
-export function DriveFileList({ folderId }: DriveFileListProps) {
+export function DriveFileList({ folderId, includeSubpastas, refreshKey }: DriveFileListProps) {
   const [files, setFiles] = useState<DriveFile[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +46,8 @@ export function DriveFileList({ folderId }: DriveFileListProps) {
       setError(null);
 
       try {
-        const response = await fetch(`/api/drive/arquivos?folderId=${folderId}`);
+        const query = includeSubpastas ? "&include=subpastas" : "";
+        const response = await fetch(`/api/drive/arquivos?folderId=${folderId}${query}`);
         const data = (await response.json()) as { files?: DriveFile[]; message?: string };
 
         if (!response.ok) throw new Error(data.message ?? "Erro ao carregar arquivos.");
@@ -53,7 +63,7 @@ export function DriveFileList({ folderId }: DriveFileListProps) {
 
     load();
     return () => { cancelled = true; };
-  }, [folderId]);
+  }, [folderId, includeSubpastas, refreshKey]);
 
   if (!folderId) {
     return (
@@ -88,6 +98,31 @@ export function DriveFileList({ folderId }: DriveFileListProps) {
     );
   }
 
+  const ungrouped = files.filter((file) => !file.subpasta);
+  const groups = new Map<string, DriveFile[]>();
+  for (const file of files) {
+    if (!file.subpasta) continue;
+    const group = groups.get(file.subpasta) ?? [];
+    group.push(file);
+    groups.set(file.subpasta, group);
+  }
+
+  return (
+    <div className="space-y-5">
+      {ungrouped.length > 0 && <FileGrid files={ungrouped} />}
+      {Array.from(groups.entries()).map(([subpasta, groupFiles]) => (
+        <div key={subpasta}>
+          <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-400">
+            {folderNameToDisplayName(subpasta)}
+          </p>
+          <FileGrid files={groupFiles} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function FileGrid({ files }: { files: DriveFile[] }) {
   return (
     <ul className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
       {files.map((file) => (

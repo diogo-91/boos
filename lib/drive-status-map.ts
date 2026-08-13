@@ -56,9 +56,14 @@ export function normalizeReservedFolderKey(value: string): string {
     .replace(/[\s_]+/g, "");
 }
 
+// Além de alimentar isReservedClientSubfolder abaixo, esta lista também
+// define quais subpastas são criadas automaticamente dentro da pasta de
+// todo cliente novo (ver createDefaultClientStructure em
+// services/google-drive.ts) — incluindo "outros", de propósito.
 export const CLIENT_SUBFOLDER_NAMES = [
   "documentos_pessoais",
   "comunicacao",
+  "outros",
 ] as const;
 export const PROCESS_SUBFOLDER_NAMES = [
   "inicial",
@@ -70,13 +75,23 @@ export const PROCESS_SUBFOLDER_NAMES = [
 // aparecendo no mesmo nível que as pastas de processo.
 const RESERVED_CLIENT_SUBFOLDERS = [
   ...CLIENT_SUBFOLDER_NAMES,
-  "outros",
   ...PROCESS_SUBFOLDER_NAMES,
 ] as const;
 
 export function isReservedClientSubfolder(name: string): boolean {
   const normalized = normalizeReservedFolderKey(name);
   return RESERVED_CLIENT_SUBFOLDERS.some(
+    (reserved) => normalizeReservedFolderKey(reserved) === normalized,
+  );
+}
+
+// Mesma checagem, restrita às subpastas de processo (inicial,
+// peticoes_subsequentes) — isReservedClientSubfolder também casa
+// documentos_pessoais/comunicacao/outros, que não fazem sentido dentro de
+// uma pasta de processo.
+export function isReservedProcessSubfolder(name: string): boolean {
+  const normalized = normalizeReservedFolderKey(name);
+  return PROCESS_SUBFOLDER_NAMES.some(
     (reserved) => normalizeReservedFolderKey(reserved) === normalized,
   );
 }

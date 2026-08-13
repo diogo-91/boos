@@ -21,9 +21,11 @@ async function getSyncToken(): Promise<string | null> {
 }
 
 async function saveSyncToken(token: string) {
-  await getSupabaseServiceClient()
+  const { error } = await getSupabaseServiceClient()
     .from("drive_sync_tokens")
     .upsert({ id: "singleton", page_token: token, updated_at: new Date().toISOString() });
+
+  if (error) throw error;
 }
 
 async function getStartPageToken(): Promise<string> {
@@ -90,6 +92,10 @@ function isInvalidPageTokenError(err: unknown): boolean {
   return status === 400 || status === 410;
 }
 
+// Deixa margem de segurança para o maxDuration=300s da rota (app/api/drive/sync/route.ts).
+// Mesmo padrão do full-scan (MAX_DURATION_MS em drive-full-scan.ts).
+const MAX_DURATION_MS = 4 * 60 * 1000;
+
 export type SyncResult = {
   processed: number;
   clientesCreated: number;
@@ -98,9 +104,11 @@ export type SyncResult = {
   filesRead: number;
   subpastasReservadasPuladas: number;
   errors: string[];
+  timedOut: boolean;
 };
 
 export async function runDriveSync(): Promise<SyncResult> {
+  const startedAt = Date.now();
   const result: SyncResult = {
     processed: 0,
     clientesCreated: 0,
@@ -108,7 +116,8 @@ export async function runDriveSync(): Promise<SyncResult> {
     statusUpdated: 0,
     filesRead: 0,
     subpastasReservadasPuladas: 0,
-    errors: []
+    errors: [],
+    timedOut: false
   };
 
   let pageToken = await getSyncToken();
@@ -176,6 +185,18 @@ export async function runDriveSync(): Promise<SyncResult> {
         } catch (err) {
           result.errors.push(`[arquivo] ${file.name}: ${err instanceof Error ? err.message : String(err)}`);
         }
+
+        // Corte de tempo por item: leitura de arquivo por IA custa 2,4s+
+        // cada, e uma página de 100 arquivos novos pode sozinha estourar os
+        // 300s da rota antes de a página inteira terminar — o corte só
+        // entre páginas (abaixo) não protege esse caso. Retorna sem salvar
+        // o cursor desta página: ela será reprocessada inteira na próxima
+        // chamada, e readDriveFile é idempotente por modifiedTime (arquivo
+        // já lido é pulado de novo, rápido).
+        if (Date.now() - startedAt > MAX_DURATION_MS) {
+          result.timedOut = true;
+          return result;
+        }
         continue;
       }
 
@@ -225,12 +246,31 @@ export async function runDriveSync(): Promise<SyncResult> {
       }
     }
 
+    // Só salva o cursor DEPOIS de processar a página com sucesso (loop de
+    // changes acima já terminou) — se a função for interrompida antes
+    // disso, a próxima execução reprocessa esta página em vez de perder
+    // changes não processados.
     if (changesData.newStartPageToken) {
       await saveSyncToken(changesData.newStartPageToken);
       break;
     }
 
+    if (changesData.nextPageToken) {
+      await saveSyncToken(changesData.nextPageToken);
+    }
+
     nextPageToken = changesData.nextPageToken;
+
+    // Corte de tempo entre páginas: com o cursor da página recém-processada
+    // já salvo acima, é seguro parar aqui e deixar a próxima execução
+    // continuar de onde esta parou, em vez de reprocessar tudo de novo
+    // (risco descrito no PRD: milhares de changes de uma migração em massa
+    // podem nunca caber nos 300s da function, e sem persistir por página o
+    // cursor nunca avançava).
+    if (nextPageToken && Date.now() - startedAt > MAX_DURATION_MS) {
+      result.timedOut = true;
+      break;
+    }
   }
 
   return result;

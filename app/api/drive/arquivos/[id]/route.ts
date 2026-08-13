@@ -9,28 +9,54 @@ export const runtime = "nodejs";
 // documentos_pessoais/comunicacao/inicial/peticoes_subsequentes) — sem isso
 // qualquer usuário autenticado podia apagar qualquer fileId que a service
 // account alcance, mandando o id direto na URL.
-async function isManagedFile(fileId: string): Promise<boolean> {
-  const drive = getGoogleDriveClient();
-  const { data } = await drive.files.get({ fileId, fields: "parents", supportsAllDrives: true });
-  const parentId = data.parents?.[0];
-  if (!parentId) return false;
+// Teto de níveis a subir a partir do parent direto — acompanha a
+// profundidade máxima da estrutura hoje (cliente/processo/subpasta/subpasta).
+const MAX_ANCESTOR_LEVELS = 4;
 
-  const { data: parentData } = await drive.files.get({
-    fileId: parentId,
+// Tipagem explícita de retorno evita um erro de inferência circular do
+// TypeScript (overloads de drive.files.get + variável de loop reatribuída
+// no mesmo escopo do call site — "implicitly has type any because it does
+// not have a type annotation and is referenced directly or indirectly in
+// its own initializer").
+async function getParentId(fileId: string): Promise<string | undefined> {
+  const { data } = await getGoogleDriveClient().files.get({
+    fileId,
     fields: "parents",
     supportsAllDrives: true
   });
-  const grandParentId = parentData.parents?.[0];
+  return data.parents?.[0];
+}
 
-  const candidateIds = [parentId, grandParentId].filter((v): v is string => Boolean(v));
-
+// Confere se o próprio id é uma pasta gerenciada (drive_folder_id de
+// cliente ou processo) — sem isso, DELETE numa pasta de processo/cliente
+// apagava a subárvore inteira no Drive e deixava o registro no banco órfão
+// (drive_folder_id apontando pra um fileId que não existe mais).
+async function isRegisteredFolder(folderId: string): Promise<boolean> {
   const supabase = getSupabaseServiceClient();
   const [{ data: clientes }, { data: processos }] = await Promise.all([
-    supabase.from("clientes").select("id").in("drive_folder_id", candidateIds).limit(1),
-    supabase.from("processos").select("id").in("drive_folder_id", candidateIds).limit(1)
+    supabase.from("clientes").select("id").eq("drive_folder_id", folderId).limit(1),
+    supabase.from("processos").select("id").eq("drive_folder_id", folderId).limit(1)
   ]);
-
   return Boolean(clientes?.length || processos?.length);
+}
+
+async function isManagedFile(fileId: string): Promise<boolean> {
+  let currentId = await getParentId(fileId);
+  if (!currentId) return false;
+
+  const supabase = getSupabaseServiceClient();
+
+  for (let level = 0; level < MAX_ANCESTOR_LEVELS && currentId; level++) {
+    const [{ data: clientes }, { data: processos }] = await Promise.all([
+      supabase.from("clientes").select("id").eq("drive_folder_id", currentId).limit(1),
+      supabase.from("processos").select("id").eq("drive_folder_id", currentId).limit(1)
+    ]);
+    if (clientes?.length || processos?.length) return true;
+
+    currentId = await getParentId(currentId);
+  }
+
+  return false;
 }
 
 export async function DELETE(
@@ -47,6 +73,13 @@ export async function DELETE(
   const { id } = await params;
 
   try {
+    if (await isRegisteredFolder(id)) {
+      return NextResponse.json(
+        { message: "Esta pasta é gerenciada pelo sistema (cliente ou processo) e não pode ser excluída por aqui." },
+        { status: 403 }
+      );
+    }
+
     const managed = await isManagedFile(id);
     if (!managed) {
       return NextResponse.json(

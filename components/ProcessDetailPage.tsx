@@ -38,6 +38,7 @@ export function ProcessDetailPage({ processId }: ProcessDetailPageProps) {
 
   const [pendingStatus, setPendingStatus] = useState<ProcessStatus | null>(null);
   const [isDriveBrowserOpen, setIsDriveBrowserOpen] = useState(false);
+  const [driveFilesRefreshKey, setDriveFilesRefreshKey] = useState(0);
   const [notes, setNotes] = useState<string | null>(null);
   const [isSavingNotes, setIsSavingNotes] = useState(false);
 
@@ -194,7 +195,11 @@ export function ProcessDetailPage({ processId }: ProcessDetailPageProps) {
               <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
                 Arquivos
               </p>
-              <DriveFileList folderId={process.driveFolderId} />
+              <DriveFileList
+                folderId={process.driveFolderId}
+                includeSubpastas
+                refreshKey={driveFilesRefreshKey}
+              />
             </div>
 
             <div>
@@ -224,7 +229,10 @@ export function ProcessDetailPage({ processId }: ProcessDetailPageProps) {
           isOpen={isDriveBrowserOpen}
           rootFolderId={process.driveFolderId}
           rootFolderName={`Processo ${process.number}`}
-          onClose={() => setIsDriveBrowserOpen(false)}
+          onClose={() => {
+            setIsDriveBrowserOpen(false);
+            setDriveFilesRefreshKey((k) => k + 1);
+          }}
         />
       )}
 

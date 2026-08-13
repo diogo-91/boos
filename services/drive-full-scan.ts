@@ -6,6 +6,7 @@ import {
   FOLDER_MIME,
   STATUS_FOLDER_MAP,
   isReservedClientSubfolder,
+  isReservedProcessSubfolder,
   matchStatusFolderKey
 } from "@/lib/drive-status-map";
 import {
@@ -261,9 +262,12 @@ export async function runFullScan(options: FullScanOptions = {}): Promise<FullSc
 
       if (skipUntilClienteFolder) {
         if (clienteItem.id !== checkpoint.clienteFolderId) continue;
-        // Esse cliente já foi totalmente processado antes da última parada — pula ele também.
+        // O corte de tempo agora pode acontecer NO MEIO de um cliente (ver
+        // handleTimeoutIfNeeded chamado por arquivo) — não dá mais pra
+        // assumir que o cliente do checkpoint já foi totalmente processado.
+        // Reprocessa ele por inteiro: readDriveFile pula por modifiedTime,
+        // então reprocessar o que já foi lido é barato.
         skipUntilClienteFolder = false;
-        continue;
       }
 
       result.clientesFound++;
@@ -309,76 +313,27 @@ export async function runFullScan(options: FullScanOptions = {}): Promise<FullSc
       const clienteFileIds = clienteChildren.filter((c) => c.mimeType !== FOLDER_MIME).map((c) => c.id);
       const clienteProcessedMap = await getProcessedFileModifiedTimeMap(clienteFileIds);
 
-      for (const child of clienteChildren) {
-        if (child.mimeType === FOLDER_MIME) {
-          // Subpasta reservada (documentos_pessoais, comunicacao etc.) é
-          // criada pelo próprio app, nunca representa um processo — só os
-          // arquivos dentro dela seguem lidos normalmente, abaixo.
-          if (!isReservedClientSubfolder(child.name)) {
-            result.processosFound++;
-            try {
-              const created = await ensureProcesso(
-                child.id,
-                child.name,
-                cliente.id,
-                cliente.drive_path
-              );
-              if (created) result.processosCreated++;
-            } catch (err) {
-              result.errors.push(`[processo] ${child.name}: ${err instanceof Error ? err.message : String(err)}`);
-            }
-          } else {
-            result.subpastasReservadasPuladas++;
-          }
-
-          // Lê arquivos dentro da pasta (processo ou subpasta reservada) —
-          // mesma guarda de volume da pasta do cliente, pro mesmo problema
-          // não se repetir um nível abaixo.
-          const processoChildren = await listChildren(child.id);
-          if (processoChildren.length > LARGE_CLIENT_ITEM_THRESHOLD) {
-            result.errors.push(
-              `[processo] ${child.name} (${cliente.nome}): pasta com ${processoChildren.length} itens (acima do limite de ${LARGE_CLIENT_ITEM_THRESHOLD}) — leitura de documentos pulada por enquanto, precisa de revisão manual.`
-            );
-            continue;
-          }
-          const processoFileIds = processoChildren.filter((c) => c.mimeType !== FOLDER_MIME).map((c) => c.id);
-          const processoProcessedMap = await getProcessedFileModifiedTimeMap(processoFileIds);
-          for (const file of processoChildren) {
-            if (file.mimeType === FOLDER_MIME) continue;
-            if (options.onlyProcuracao && !looksLikeProcuracao(file.name)) continue;
-            try {
-              const read = await readDriveFile(file.id, file.name, child.id, undefined, {
-                modifiedTime: file.modifiedTime,
-                processedModifiedTime: processoProcessedMap[file.id] ?? null
-              });
-              result.fileDetails.push({
-                fileName: file.name,
-                documentType: read.documentType,
-                fieldsExtracted: read.fieldsExtracted,
-                skipped: read.skipped,
-                skipReason: read.skipReason,
-                clienteNome: cliente.nome
-              });
-              if (!read.skipped && read.fieldsExtracted.length > 0) result.filesRead++;
-              else if (read.skipped) result.filesSkipped++;
-            } catch (err) {
-              result.errors.push(`[arquivo] ${file.name}: ${err instanceof Error ? err.message : String(err)}`);
-            }
-
-            if (await handleTimeoutIfNeeded(result, startedAt, statusFolder.id, clienteItem.id)) {
-              break statusLoop;
-            }
-          }
-        } else {
-          // Arquivo direto na pasta do cliente
-          if (options.onlyProcuracao && !looksLikeProcuracao(child.name)) continue;
+      // Lê os arquivos (não-pasta) de uma lista já carregada, atribuindo-os
+      // ao parentFolderId informado — usado tanto pro conteúdo direto de
+      // uma pasta de processo quanto, um nível abaixo, pro conteúdo de
+      // inicial/peticoes_subsequentes dentro dela. Retorna true se bateu o
+      // corte de tempo no meio da leitura, pro chamador decidir sair do
+      // statusLoop.
+      const readFilesInFolder = async (
+        files: typeof clienteChildren,
+        parentFolderId: string,
+        processedMap: Record<string, string | null>
+      ): Promise<boolean> => {
+        for (const file of files) {
+          if (file.mimeType === FOLDER_MIME) continue;
+          if (options.onlyProcuracao && !looksLikeProcuracao(file.name)) continue;
           try {
-            const read = await readDriveFile(child.id, child.name, clienteItem.id, undefined, {
-              modifiedTime: child.modifiedTime,
-              processedModifiedTime: clienteProcessedMap[child.id] ?? null
+            const read = await readDriveFile(file.id, file.name, parentFolderId, undefined, {
+              modifiedTime: file.modifiedTime,
+              processedModifiedTime: processedMap[file.id] ?? null
             });
             result.fileDetails.push({
-              fileName: child.name,
+              fileName: file.name,
               documentType: read.documentType,
               fieldsExtracted: read.fieldsExtracted,
               skipped: read.skipped,
@@ -388,10 +343,87 @@ export async function runFullScan(options: FullScanOptions = {}): Promise<FullSc
             if (!read.skipped && read.fieldsExtracted.length > 0) result.filesRead++;
             else if (read.skipped) result.filesSkipped++;
           } catch (err) {
-            result.errors.push(`[arquivo] ${child.name}: ${err instanceof Error ? err.message : String(err)}`);
+            result.errors.push(`[arquivo] ${file.name}: ${err instanceof Error ? err.message : String(err)}`);
           }
 
           if (await handleTimeoutIfNeeded(result, startedAt, statusFolder.id, clienteItem.id)) {
+            return true;
+          }
+        }
+        return false;
+      };
+
+      // Arquivos diretos na pasta do cliente — readFilesInFolder já ignora
+      // pastas dentro da própria lista, então dá pra passar clienteChildren
+      // inteiro sem filtrar antes.
+      if (await readFilesInFolder(clienteChildren, clienteItem.id, clienteProcessedMap)) {
+        break statusLoop;
+      }
+
+      for (const child of clienteChildren) {
+        if (child.mimeType !== FOLDER_MIME) continue;
+
+        // Subpasta reservada (documentos_pessoais, comunicacao etc.) é
+        // criada pelo próprio app, nunca representa um processo — só os
+        // arquivos dentro dela seguem lidos normalmente, abaixo.
+        if (!isReservedClientSubfolder(child.name)) {
+          result.processosFound++;
+          try {
+            const created = await ensureProcesso(
+              child.id,
+              child.name,
+              cliente.id,
+              cliente.drive_path
+            );
+            if (created) result.processosCreated++;
+          } catch (err) {
+            result.errors.push(`[processo] ${child.name}: ${err instanceof Error ? err.message : String(err)}`);
+          }
+        } else {
+          result.subpastasReservadasPuladas++;
+        }
+
+        // Lê arquivos dentro da pasta (processo ou subpasta reservada) —
+        // mesma guarda de volume da pasta do cliente, pro mesmo problema
+        // não se repetir um nível abaixo.
+        const processoChildren = await listChildren(child.id);
+        if (processoChildren.length > LARGE_CLIENT_ITEM_THRESHOLD) {
+          result.errors.push(
+            `[processo] ${child.name} (${cliente.nome}): pasta com ${processoChildren.length} itens (acima do limite de ${LARGE_CLIENT_ITEM_THRESHOLD}) — leitura de documentos pulada por enquanto, precisa de revisão manual.`
+          );
+          continue;
+        }
+        const processoFileIds = processoChildren.filter((c) => c.mimeType !== FOLDER_MIME).map((c) => c.id);
+        const processoProcessedMap = await getProcessedFileModifiedTimeMap(processoFileIds);
+        if (await readFilesInFolder(processoChildren, child.id, processoProcessedMap)) {
+          break statusLoop;
+        }
+
+        // Subpastas do processo (inicial/, peticoes_subsequentes/) ficam
+        // um nível abaixo do que o loop acima alcança — sem isto, o
+        // conteúdo delas nunca era lido (era sempre pulado, por ser
+        // pasta). Pastas não-reservadas dentro do processo continuam
+        // ignoradas, como antes. Nota: este bloco roda tanto pra "child"
+        // sendo uma pasta de processo quanto pra uma subpasta reservada de
+        // cliente (documentos_pessoais/comunicacao/outros) — nelas,
+        // isReservedProcessSubfolder nunca casa (a lista é só inicial/
+        // peticoes_subsequentes), então o loop simplesmente não encontra
+        // nada pra descer. Inofensivo, mas roda a mais do que o nome do
+        // bloco sugere.
+        for (const processoSubfolder of processoChildren) {
+          if (processoSubfolder.mimeType !== FOLDER_MIME) continue;
+          if (!isReservedProcessSubfolder(processoSubfolder.name)) continue;
+
+          const subfolderChildren = await listChildren(processoSubfolder.id);
+          if (subfolderChildren.length > LARGE_CLIENT_ITEM_THRESHOLD) {
+            result.errors.push(
+              `[processo] ${child.name}/${processoSubfolder.name} (${cliente.nome}): pasta com ${subfolderChildren.length} itens (acima do limite de ${LARGE_CLIENT_ITEM_THRESHOLD}) — leitura de documentos pulada por enquanto, precisa de revisão manual.`
+            );
+            continue;
+          }
+          const subfolderFileIds = subfolderChildren.filter((c) => c.mimeType !== FOLDER_MIME).map((c) => c.id);
+          const subfolderProcessedMap = await getProcessedFileModifiedTimeMap(subfolderFileIds);
+          if (await readFilesInFolder(subfolderChildren, processoSubfolder.id, subfolderProcessedMap)) {
             break statusLoop;
           }
         }

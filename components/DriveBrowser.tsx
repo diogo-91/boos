@@ -103,7 +103,7 @@ type DriveFileRowProps = {
   file: DriveFile;
   isDeleting: boolean;
   onNavigate: (file: DriveFile) => void;
-  onDelete: (id: string) => void;
+  onDelete: (file: DriveFile) => void;
 };
 
 function DriveFileRow({ file, isDeleting, onNavigate, onDelete }: DriveFileRowProps) {
@@ -143,7 +143,7 @@ function DriveFileRow({ file, isDeleting, onNavigate, onDelete }: DriveFileRowPr
       <td className="px-4 py-3 text-sm text-slate-500">{formatDate(file.modifiedTime)}</td>
       <td className="px-4 py-3">
         <button
-          onClick={() => onDelete(file.id)}
+          onClick={() => onDelete(file)}
           disabled={isDeleting}
           className="text-slate-300 transition hover:text-red-500 disabled:opacity-40"
           title="Deletar"
@@ -255,8 +255,14 @@ export function DriveBrowser({
     };
   }, [isOpen, onClose]);
 
-  async function handleDelete(fileId: string) {
-    const deleted = await deleteFile(fileId);
+  async function handleDelete(file: DriveFile) {
+    const isDir = file.mimeType === FOLDER_MIME;
+    const message = isDir
+      ? `Excluir a pasta "${file.name}" e todo o seu conteúdo? Esta ação não pode ser desfeita.`
+      : `Excluir o arquivo "${file.name}"? Esta ação não pode ser desfeita.`;
+    if (!window.confirm(message)) return;
+
+    const deleted = await deleteFile(file.id);
     if (deleted) {
       refresh();
     }

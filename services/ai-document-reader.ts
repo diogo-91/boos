@@ -65,6 +65,18 @@ export type DocumentType =
 const PRIORITY_ID_DOCS = new Set<DocumentType>(["procuracao", "documento_pessoal"]);
 const QUALIFICATION_FIELDS = ["nome", "estado_civil", "endereco", "rg_ie", "data_nascimento_abertura"] as const;
 
+// Colunas de processo que updateProcessFields sabe gravar — usado abaixo
+// pra ler o registro atual e decidir quais campos já estão preenchidos
+// quando a peça não é fonte confiável o bastante pra sobrescrever.
+const PROCESS_FIELD_KEYS = [
+  "numero_cnj", "tipo_acao", "parte_contraria", "vara_comarca", "localizacao",
+  "data_protocolo", "data_encerramento", "modelo_cobranca", "valor_entrada", "percentual_exito"
+] as const;
+// Campos de cobrança — um contrato de honorários continua podendo
+// atualizá-los mesmo quando o resto dos campos de processo só preenche o
+// que está vazio (ver uso em readDriveFile).
+const COBRANCA_FIELDS = new Set(["modelo_cobranca", "valor_entrada", "percentual_exito"]);
+
 function detectDocumentType(fileName: string, folderPath: string): DocumentType {
   const name = fileName.toLowerCase();
   // Mesmo normalizador de isReservedClientSubfolder — sem ele, "Documentos
@@ -563,8 +575,36 @@ async function updateClientFields(clientId: string, fields: ExtractedClientField
   if (error) throw new Error(`Supabase clientes update: ${error.message} (${error.code}) — dados: ${JSON.stringify(updateData)}`);
 }
 
-async function updateProcessFields(processId: string, fields: ExtractedProcessFields) {
-  const sanitized = sanitizeProcessFields(fields);
+// "fill-empty" (default) só preenche colunas hoje vazias no registro —
+// nenhum chamador sobrescreve dado existente sem pedir explicitamente
+// "overwrite" (reservado à inicial vinda da subpasta inicial/ do processo).
+// alwaysOverwrite lista campos que escrevem mesmo em fill-empty (cobrança
+// de contrato de honorários). Em erro de leitura do registro atual, NADA é
+// gravado (fail-closed): erro de banco não pode ampliar permissão de escrita.
+async function updateProcessFields(
+  processId: string,
+  fields: ExtractedProcessFields,
+  mode: "overwrite" | "fill-empty" = "fill-empty",
+  alwaysOverwrite?: ReadonlySet<string>
+): Promise<string[]> {
+  let effectiveFields = fields;
+  if (mode === "fill-empty") {
+    const { data: current, error } = await getSupabaseServiceClient()
+      .from("processos")
+      .select(PROCESS_FIELD_KEYS.join(","))
+      .eq("id", processId)
+      .maybeSingle<Record<(typeof PROCESS_FIELD_KEYS)[number], unknown>>();
+    if (error || !current) return [];
+    effectiveFields = Object.fromEntries(
+      Object.entries(fields).filter(([key, value]) => {
+        if (value === undefined) return false;
+        if (alwaysOverwrite?.has(key)) return true;
+        return !current[key as (typeof PROCESS_FIELD_KEYS)[number]];
+      })
+    ) as ExtractedProcessFields;
+  }
+
+  const sanitized = sanitizeProcessFields(effectiveFields);
   const updateData: Record<string, unknown> = { ...sanitized };
 
   // sanitizeValue devolve valor_entrada como string formatada ("R$ 1.000,00")
@@ -577,10 +617,11 @@ async function updateProcessFields(processId: string, fields: ExtractedProcessFi
     updateData.valor_entrada = parseMoneyToNumber(sanitized.valor_entrada);
   }
 
-  if (Object.keys(updateData).length === 0) return;
+  if (Object.keys(updateData).length === 0) return [];
 
   const { error } = await getSupabaseServiceClient().from("processos").update(updateData).eq("id", processId);
   if (error) throw new Error(`Supabase processos update: ${error.message} (${error.code}) — dados: ${JSON.stringify(updateData)}`);
+  return Object.keys(updateData);
 }
 
 async function findClientByDriveFolderId(folderId: string) {
@@ -879,12 +920,21 @@ export async function readDriveFile(
     !processFromParent && grandParentId ? await findProcessByDriveFolderId(grandParentId) : null;
   const processRecord = processFromParent ?? processFromGrandparent;
 
+  let fileInInicialSubfolder = false;
   if (processRecord) {
     result.processId = processRecord.id;
     result.clientId = processRecord.cliente_id;
-    folderContext = processFromParent
-      ? fileName
-      : `${(await getFolderName(parentFolderId)) ?? "processo"}/${fileName}`;
+    if (processFromParent) {
+      folderContext = fileName;
+    } else {
+      const subName = (await getFolderName(parentFolderId)) ?? "processo";
+      folderContext = `${subName}/${fileName}`;
+      // Confiança pela PASTA, nunca pelo nome do arquivo: só o que está
+      // fisicamente dentro de inicial/ pode sobrescrever a identidade do
+      // processo ("Petição de Cumprimento.pdf" contém "peticao" no nome e
+      // seria detectada como documento_inicial).
+      fileInInicialSubfolder = normalizeReservedFolderKey(subName) === "inicial";
+    }
   } else if (grandParentId && statusMap[grandParentId]) {
     clientFolderId = parentFolderId;
   } else if (grandParentId) {
@@ -966,10 +1016,21 @@ export async function readDriveFile(
       valor_entrada: extracted.valor_entrada,
       percentual_exito: extracted.percentual_exito
     };
-    await updateProcessFields(result.processId, processFields);
-    result.fieldsExtracted = Object.keys(processFields).filter(
-      (k) => processFields[k as keyof ExtractedProcessFields]
+
+    // Só a inicial que está fisicamente dentro de inicial/ sobrescreve a
+    // identidade do processo (fileInInicialSubfolder confia na PASTA, não no
+    // nome do arquivo). Todo o resto — peça na raiz do processo, petição
+    // subsequente, docType outro — só preenche colunas hoje vazias
+    // (fill-empty, default de updateProcessFields), com a exceção declarada
+    // dos campos de cobrança quando o documento é um contrato de honorários.
+    const trustedInicial = docType === "documento_inicial" && fileInInicialSubfolder;
+    const savedKeys = await updateProcessFields(
+      result.processId,
+      processFields,
+      trustedInicial ? "overwrite" : "fill-empty",
+      docType === "contrato_honorarios" ? COBRANCA_FIELDS : undefined
     );
+    result.fieldsExtracted = savedKeys;
     emit("save", "done", `${result.fieldsExtracted.length} campo(s) salvo(s)`);
     return result;
   }

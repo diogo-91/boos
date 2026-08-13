@@ -8,6 +8,7 @@ import { formatDocument } from "@/lib/client-view-model";
 import { useOperationalData } from "@/components/OperationalDataProvider";
 import { syncClientDriveFolder } from "@/services/drive-sync";
 import { DriveFolderCard } from "@/components/DriveFolderCard";
+import { DriveFileList } from "@/components/DriveFileList";
 import { DriveBrowser } from "@/components/DriveBrowser";
 import { EmptyState } from "@/components/EmptyState";
 import { ClientFormModal } from "@/components/forms/ClientFormModal";
@@ -45,6 +46,7 @@ export function ClientDetailPage({ clientId }: ClientDetailPageProps) {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isProcessModalOpen, setIsProcessModalOpen] = useState(false);
   const [isDriveBrowserOpen, setIsDriveBrowserOpen] = useState(false);
+  const [driveFilesRefreshKey, setDriveFilesRefreshKey] = useState(0);
   const [isCreatingFolder, setIsCreatingFolder] = useState(false);
   const [localDriveFolderId, setLocalDriveFolderId] = useState<string | null | undefined>(undefined);
   const [pendingStatus, setPendingStatus] = useState<ClientStatus | null>(null);
@@ -260,12 +262,25 @@ export function ClientDetailPage({ clientId }: ClientDetailPageProps) {
           </SectionCard>
 
           <SectionCard title="Pasta no Drive">
-            <div id="pasta-drive">
-              <DriveFolderCard
-                path={client.driveFolder}
-                folderId={effectiveDriveFolderId}
-                onOpenBrowser={() => setIsDriveBrowserOpen(true)}
-              />
+            <div className="space-y-5">
+              <div id="pasta-drive">
+                <DriveFolderCard
+                  path={client.driveFolder}
+                  folderId={effectiveDriveFolderId}
+                  onOpenBrowser={() => setIsDriveBrowserOpen(true)}
+                />
+              </div>
+
+              <div>
+                <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Arquivos
+                </p>
+                <DriveFileList
+                  folderId={effectiveDriveFolderId}
+                  includeSubpastas
+                  refreshKey={driveFilesRefreshKey}
+                />
+              </div>
             </div>
           </SectionCard>
         </div>
@@ -292,7 +307,10 @@ export function ClientDetailPage({ clientId }: ClientDetailPageProps) {
           isOpen={isDriveBrowserOpen}
           rootFolderId={effectiveDriveFolderId}
           rootFolderName={client.name}
-          onClose={() => setIsDriveBrowserOpen(false)}
+          onClose={() => {
+            setIsDriveBrowserOpen(false);
+            setDriveFilesRefreshKey((k) => k + 1);
+          }}
         />
       )}
 
