@@ -102,7 +102,7 @@ export async function linkOrCreateClienteFromFolder(
     drive_path
   });
 
-  if (error) throw error;
+  if (error) throw new Error(`Supabase clientes insert: ${error.message} (${error.code})`);
   return { cliente: { id, nome, drive_path, status: STATUS_DB_MAP[status] }, created: true };
 }
 
@@ -135,7 +135,7 @@ export async function updateClienteStatusFromFolder(
     })
     .eq("drive_folder_id", folderId);
 
-  if (error) throw error;
+  if (error) throw new Error(`Supabase clientes update: ${error.message} (${error.code})`);
 }
 
 export async function findProcessoByDriveFolderId(folderId: string) {
@@ -168,6 +168,6 @@ export async function createProcessoFromFolder(
     drive_path: `${clienteDrivePath} › ${folderName}`
   });
 
-  if (error) throw error;
+  if (error) throw new Error(`Supabase processos insert: ${error.message} (${error.code})`);
   return id;
 }
