@@ -1238,7 +1238,12 @@ export async function readDriveFile(
     // processo "achado" por ensureProcessoFromClienteFile pode ser um
     // processo real do cliente, e sobrescrever seus campos ou criar um
     // processo "A definir" a partir de um documento pessoal seria errado.
-    if (!parentIsReservedSubfolder && (docType === "documento_inicial" || docType === "contrato_honorarios" || docType === "outro")) {
+    // Contrato de honorários é a exceção da exceção: mora em
+    // documentos_pessoais/ por decisão do escritório, nunca cria processo
+    // (só documento_inicial cria) e precisa continuar alimentando os
+    // campos de cobrança do processo existente.
+    const podeTocarProcesso = !parentIsReservedSubfolder || docType === "contrato_honorarios";
+    if (podeTocarProcesso && (docType === "documento_inicial" || docType === "contrato_honorarios" || docType === "outro")) {
       const processId = await ensureProcessoFromClienteFile(clientId, extracted, docType);
       if (processId) {
         result.processId = processId;
